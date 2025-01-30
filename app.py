@@ -82,6 +82,17 @@ def download_audio(url, output_path):
         os.makedirs(temp_dir, exist_ok=True)
         
         try:
+            # Get cookies file path
+            cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+            if not os.path.exists(cookies_path):
+                logger.warning("Cookies file not found at: %s", cookies_path)
+                # Try alternate location (for Docker)
+                cookies_path = '/app/cookies.txt'
+                if os.path.exists(cookies_path):
+                    logger.info("Found cookies file at Docker path: %s", cookies_path)
+                else:
+                    logger.warning("Cookies file not found in Docker path either")
+            
             # Configure yt-dlp options
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -98,6 +109,11 @@ def download_audio(url, output_path):
                 'noplaylist': True,
                 'http_headers': get_custom_headers()
             }
+            
+            # Add cookies if available
+            if os.path.exists(cookies_path):
+                logger.info("Using cookies file for authentication")
+                ydl_opts['cookiefile'] = cookies_path
             
             # Download with yt-dlp
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
