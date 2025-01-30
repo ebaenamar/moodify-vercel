@@ -1,0 +1,12 @@
+{
+  "name": "moodify",
+  "version": "1.0.0",
+  "description": "Audio transformation tool with different vibes",
+  "main": "script.js",
+  "scripts": {
+    "start": "python app.py"
+  },
+  "dependencies": {
+    "http-server": "^14.1.1"
+  }
+}
