@@ -28,13 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let processedAudioUrl = null;
 
     // Function to show error message
-    function showError(message) {
+    function showError(message, type = 'error') {
         const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message';
+        errorDiv.className = type === 'error' ? 'error-message' : 'info-message';
         errorDiv.textContent = message;
         
         // Remove any existing error message
-        const existingError = document.querySelector('.error-message');
+        const existingError = document.querySelector('.error-message, .info-message');
         if (existingError) {
             existingError.remove();
         }
@@ -49,8 +49,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to validate YouTube URL
     function isValidYoutubeUrl(url) {
-        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
+        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]{11}$/;
         return youtubeRegex.test(url);
+    }
+
+    // Function to extract video ID from YouTube URL
+    function getYoutubeVideoId(url) {
+        const match = url.match(/(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
+        return match ? match[1] : null;
+    }
+
+    // Function to handle mood selection
+    function handleMoodSelection(emoji, vibe) {
+        document.querySelectorAll('.emoji').forEach(e => e.classList.remove('selected'));
+        emoji.classList.add('selected');
+        selectedVibe = vibe;
+        
+        if (youtubeInput.value.trim()) {
+            if (!isValidYoutubeUrl(youtubeInput.value.trim())) {
+                showError('Please enter a valid YouTube URL');
+            }
+        } else {
+            showError('Mood selected! Now paste a YouTube URL to transform your music.', 'info');
+        }
     }
 
     // Create emoji buttons with tooltips
@@ -71,14 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         emojiContainer.appendChild(emojiWrapper);
 
         emoji.addEventListener('click', () => {
-            document.querySelectorAll('.emoji').forEach(e => e.classList.remove('selected'));
-            emoji.classList.add('selected');
-            selectedVibe = vibe;
-            
-            // If we have a processed audio and select a new vibe, enable retry
-            if (processedAudioUrl) {
-                buttonContainer.classList.remove('hidden');
-            }
+            handleMoodSelection(emoji, vibe);
         });
     });
 
@@ -89,12 +103,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!isValidYoutubeUrl(url)) {
-            showError('Please enter a valid YouTube URL');
+            showError('Please enter a valid YouTube URL (e.g., https://youtube.com/watch?v=... or https://youtu.be/...)');
             return;
         }
 
         if (!vibeType) {
-            showError('Please select a vibe first');
+            showError('Please select a mood first! Click on one of the emojis above.');
             return;
         }
 
@@ -120,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Failed to process audio');
                 }
-                throw new Error('Failed to process audio');
+                throw new Error('Failed to process audio. Please try again or use a different YouTube link.');
             }
 
             const data = await response.json();
@@ -145,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showError('Please enter a YouTube URL');
             }
         } else if (e.key === 'Enter' && !selectedVibe) {
-            showError('Please select a vibe first');
+            showError('Please select a mood first! Click on one of the emojis above.');
         }
     });
 
