@@ -1,15 +1,14 @@
 {
   "version": 2,
   "builds": [
-    { "src": "app.py", "use": "@vercel/python" },
-    { "src": "public/**/*", "use": "@vercel/static" }
+    { "src": "frontend/**/*", "use": "@vercel/static" }
   ],
   "routes": [
     { 
       "src": "/audio/(.*\\.mp3)",
       "headers": { "cache-control": "public, max-age=31536000, immutable" },
-      "dest": "/public/audio/$1"
+      "dest": "/frontend/public/audio/$1"
     },
-    { "src": "/(.*)", "dest": "/app.py" }
+    { "src": "/(.*)", "dest": "/frontend/$1" }
   ]
 }
