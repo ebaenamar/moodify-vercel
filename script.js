@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep the original API URL configuration
     const API_URL = window.location.hostname === 'localhost' 
         ? 'http://localhost:5005'
-        : 'https://moodify-vercel.onrender.com';
+        : 'https://moodi-fy.onrender.com';  
 
     const vibes = [
         { emoji: '🌙', type: 'slow_reverb', name: 'Dreamy' },
@@ -137,14 +137,14 @@ document.addEventListener('DOMContentLoaded', () => {
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
 
-            const response = await fetch(`${API_URL}/api/download`, {
+            const response = await fetch(`${API_URL}/api/transform`, {  
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     url: url,
-                    mood: vibeType
+                    effect_type: vibeType  
                 })
             });
 
@@ -161,17 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorMessage);
             }
 
-            const blob = await response.blob();
-            if (blob.size === 0) {
-                throw new Error('Received empty audio file');
-            }
-            
-            // Revoke the old URL if it exists
-            if (processedAudioUrl) {
-                URL.revokeObjectURL(processedAudioUrl);
-            }
-            
-            processedAudioUrl = URL.createObjectURL(blob);
+            const data = await response.json();
+            processedAudioUrl = data.audio_url;
             
             audioClip.src = processedAudioUrl;
             audioClip.classList.remove('hidden');
