@@ -18,7 +18,12 @@ app = Flask(__name__)
 CORS(app, 
      resources={
          r"/api/*": {
-             "origins": ["https://moodify-vercel.vercel.app", "http://localhost:8080", "http://localhost:3000"],
+             "origins": [
+                 "https://moodi-fy.vercel.app",
+                 "https://moodi-hgghnhjr0-leds-projects-27d3748c.vercel.app",
+                 "http://localhost:8080",
+                 "http://localhost:3000"
+             ],
              "methods": ["GET", "POST", "OPTIONS"],
              "allow_headers": ["Content-Type"],
              "expose_headers": ["Content-Type"],
@@ -31,7 +36,7 @@ CORS(app,
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'https://moodify-vercel.vercel.app')
+    response.headers.add('Access-Control-Allow-Origin', 'https://moodi-fy.vercel.app')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     return response
