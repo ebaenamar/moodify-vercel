@@ -20,8 +20,6 @@ CORS(app,
          r"/api/*": {
              "origins": [
                  "https://moodi-fy.vercel.app",
-                 "https://moodi-hgghnhjr0-leds-projects-27d3748c.vercel.app",
-                 "http://localhost:8080",
                  "http://localhost:3000"
              ],
              "methods": ["GET", "POST", "OPTIONS"],
@@ -36,7 +34,11 @@ CORS(app,
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'https://moodi-fy.vercel.app')
+    origin = request.headers.get('Origin')
+    if origin and (origin.endswith('.vercel.app') or origin.startswith('http://localhost')):
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    else:
+        response.headers.add('Access-Control-Allow-Origin', 'https://moodi-fy.vercel.app')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     return response
