@@ -184,4 +184,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    // Add click handlers for song titles
+    document.querySelectorAll('.song-title').forEach(songTitle => {
+        songTitle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const youtubeLink = songTitle.dataset.youtubeLink;
+            youtubeInput.value = youtubeLink;
+            
+            // Show a brief "Copied!" message
+            const tooltip = songTitle.querySelector('.copy-tooltip');
+            const originalText = tooltip.textContent;
+            tooltip.textContent = 'Copied!';
+            setTimeout(() => {
+                tooltip.textContent = originalText;
+            }, 2000);
+        });
+    });
 });

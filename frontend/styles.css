@@ -371,25 +371,11 @@ audio.playing {
     text-decoration: none;
     position: relative;
     cursor: pointer;
-    transition: color 0.3s ease;
     display: inline-block;
 }
 
 .song-title:hover {
     color: #0ff;
-    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
-}
-
-.song-title::after {
-    content: '📋';
-    margin-left: 8px;
-    font-size: 0.9em;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.song-title:hover::after {
-    opacity: 1;
 }
 
 .copy-tooltip {
@@ -397,21 +383,19 @@ audio.playing {
     background: rgba(0, 0, 0, 0.8);
     color: #fff;
     padding: 5px 10px;
-    border-radius: 5px;
-    font-size: 0.8rem;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transform: translateY(-10px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    top: -30px;
+    border-radius: 4px;
+    font-size: 12px;
+    bottom: -30px;
     left: 50%;
     transform: translateX(-50%);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
 }
 
 .song-title:hover .copy-tooltip {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
 }
 
 @keyframes copySuccess {
