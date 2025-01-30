@@ -118,28 +118,65 @@ document.addEventListener('DOMContentLoaded', () => {
         emoji.addEventListener('click', () => handleMoodSelection(emoji, vibe));
     });
 
-    async function getYoutubeCookies() {
-        try {
-            // Create an iframe to access youtube.com cookies
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            iframe.src = 'https://www.youtube.com';
-            document.body.appendChild(iframe);
+    // Add cookie helper functions
+    function showCookieInstructions() {
+        const modal = document.createElement('div');
+        modal.className = 'cookie-modal';
+        modal.innerHTML = `
+            <div class="cookie-modal-content">
+                <h3>YouTube Authentication Required</h3>
+                <p>To download videos, we need your YouTube cookies. Here's how to get them:</p>
+                <ol>
+                    <li>Go to <a href="https://www.youtube.com" target="_blank">YouTube.com</a> and make sure you're logged in</li>
+                    <li>Right-click anywhere on the page and select "Inspect" or press F12</li>
+                    <li>Go to the "Application" or "Storage" tab</li>
+                    <li>Under "Cookies", click on "https://youtube.com"</li>
+                    <li>Look for cookies named: VISITOR_INFO1_LIVE, LOGIN_INFO, SID, HSID, SSID, APISID, SAPISID, or __Secure-3PAPISID</li>
+                    <li>Copy the values of these cookies below</li>
+                </ol>
+                <div class="cookie-inputs">
+                    <input type="text" id="visitor-info" placeholder="VISITOR_INFO1_LIVE value">
+                    <input type="text" id="login-info" placeholder="LOGIN_INFO value">
+                    <input type="text" id="sid" placeholder="SID value">
+                    <input type="text" id="hsid" placeholder="HSID value">
+                </div>
+                <div class="cookie-buttons">
+                    <button onclick="saveCookies()">Save Cookies</button>
+                    <button onclick="closeCookieModal()">Cancel</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
 
-            // Wait for iframe to load
-            await new Promise(resolve => iframe.onload = resolve);
+    function saveCookies() {
+        const cookieData = {
+            VISITOR_INFO1_LIVE: document.getElementById('visitor-info').value,
+            LOGIN_INFO: document.getElementById('login-info').value,
+            SID: document.getElementById('sid').value,
+            HSID: document.getElementById('hsid').value
+        };
+        
+        // Save cookies to localStorage
+        localStorage.setItem('youtube_cookies', JSON.stringify(cookieData));
+        
+        // Close modal
+        closeCookieModal();
+        
+        // Show success message
+        showSuccessMessage('YouTube cookies saved successfully!');
+    }
 
-            // Get cookies using document.cookie from the iframe
-            const cookies = iframe.contentWindow.document.cookie;
-            
-            // Clean up
-            document.body.removeChild(iframe);
-            
-            return cookies;
-        } catch (error) {
-            console.error('Error getting YouTube cookies:', error);
-            return null;
+    function closeCookieModal() {
+        const modal = document.querySelector('.cookie-modal');
+        if (modal) {
+            modal.remove();
         }
+    }
+
+    function getStoredCookies() {
+        const cookies = localStorage.getItem('youtube_cookies');
+        return cookies ? JSON.parse(cookies) : null;
     }
 
     async function processYouTubeLink(url, vibeType) {
@@ -148,59 +185,40 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!isValidYoutubeUrl(url)) {
-            showError('Please enter a valid YouTube URL (e.g., https://youtube.com/watch?v=... or https://youtu.be/...)');
-            return;
-        }
-
-        if (!vibeType) {
-            showError('Please select a mood first! Click on one of the emojis above.');
-            return;
-        }
-
         try {
-            // Test CORS first (keeping original functionality)
-            try {
-                const testResponse = await fetch(`${API_URL}/api/test`, {
-                    method: 'GET',
-                    headers: getDeviceHeaders()
-                });
-                
-                if (!testResponse.ok) {
-                    throw new Error('CORS test failed');
-                }
-                
-                const testData = await testResponse.json();
-                console.log('CORS test successful:', testData);
-            } catch (corsError) {
-                console.error('CORS test failed:', corsError);
-                throw new Error('Unable to connect to the server. Please try again later.');
+            // Check if we have stored cookies
+            const storedCookies = getStoredCookies();
+            if (!storedCookies) {
+                showCookieInstructions();
+                return;
             }
 
-            // Get YouTube cookies
-            const cookies = await getYoutubeCookies();
-            
             loadingDiv.classList.remove('hidden');
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
 
-            const response = await fetch(`${API_URL}/api/transform`, {
+            const response = await fetch(`${API_URL}/download`, {
                 method: 'POST',
-                headers: getDeviceHeaders(),
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getDeviceHeaders()
+                },
                 body: JSON.stringify({
                     url: url,
                     effect_type: vibeType,
-                    cookies: cookies
+                    cookies: storedCookies
                 })
             });
 
             if (!response.ok) {
-                if (response.headers.get('content-type')?.includes('application/json')) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to process audio');
-                } else {
-                    throw new Error('Failed to process audio');
+                const errorData = await response.json();
+                if (errorData.error && errorData.error.includes('bot')) {
+                    // If we get a bot detection error, ask for new cookies
+                    localStorage.removeItem('youtube_cookies');
+                    showCookieInstructions();
+                    return;
                 }
+                throw new Error(errorData.error || 'Failed to process YouTube link');
             }
 
             // Get the audio blob directly from the response

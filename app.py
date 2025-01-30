@@ -113,7 +113,7 @@ def get_fresh_cookies(url):
         logger.error(f"Error getting fresh cookies: {str(e)}")
         return None
 
-def write_cookies_from_browser(cookies_str):
+def write_cookies_from_browser(cookies_dict):
     """Write cookies from browser to cookies.txt file."""
     try:
         cookies_path = '/app/cookies.txt'
@@ -123,12 +123,12 @@ def write_cookies_from_browser(cookies_str):
             f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
             f.write("# This is a generated file!  Do not edit.\n\n")
             
-            # Parse cookies string from browser
-            for cookie in cookies_str.split(';'):
-                if '=' in cookie:
-                    name, value = cookie.strip().split('=', 1)
-                    # Set a default expiration of 1 year from now
-                    expires = str(int(time.time()) + 31536000)
+            # Current time plus 1 year for expiry
+            expires = str(int(time.time()) + 31536000)
+            
+            # Write each cookie in Netscape format
+            for name, value in cookies_dict.items():
+                if value:  # Only write non-empty cookies
                     f.write(f".youtube.com\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}\n")
         
         os.chmod(cookies_path, 0o644)
@@ -396,7 +396,7 @@ def download():
             return jsonify({'error': 'No URL provided'}), 400
 
         url = data['url']
-        cookies = data.get('cookies')  # Get cookies from request if available
+        cookies = data.get('cookies')  # This will now be a dictionary
 
         # Validate YouTube URL
         if not extract_video_id(url):
@@ -408,19 +408,23 @@ def download():
         output_path = os.path.join(OUTPUT_DIR, output_filename)
 
         # If we received cookies from the browser, use them
-        if cookies:
+        cookies_path = None
+        if cookies and isinstance(cookies, dict):
             logger.info("Received cookies from browser, writing to cookies.txt")
             cookies_path = write_cookies_from_browser(cookies)
             if cookies_path:
                 logger.info("Successfully wrote browser cookies to file")
-        else:
-            cookies_path = None
+            else:
+                logger.warning("Failed to write browser cookies")
 
         # Download the audio
         try:
             output_path = download_audio(url, output_path, cookies_path)
         except Exception as e:
-            logger.error(f"Error downloading audio: {str(e)}")
+            error_msg = str(e)
+            logger.error(f"Error downloading audio: {error_msg}")
+            if 'bot' in error_msg.lower():
+                return jsonify({'error': 'YouTube authentication required. Please provide valid cookies.'}), 401
             return jsonify({'error': str(e)}), 500
 
         # Return the file
