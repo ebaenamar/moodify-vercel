@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const shareButton = document.getElementById('share');
 
     // Add API URL configuration at the top of the file
-    const API_URL = 'https://moodify-vercel.onrender.com';
+    const API_URL = 'https://moodi-fy.onrender.com';
 
     const vibes = [
         { emoji: '🌙', type: 'slow_reverb', name: 'Dreamy' },
