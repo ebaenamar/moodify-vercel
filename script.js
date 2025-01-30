@@ -118,6 +118,30 @@ document.addEventListener('DOMContentLoaded', () => {
         emoji.addEventListener('click', () => handleMoodSelection(emoji, vibe));
     });
 
+    async function getYoutubeCookies() {
+        try {
+            // Create an iframe to access youtube.com cookies
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'https://www.youtube.com';
+            document.body.appendChild(iframe);
+
+            // Wait for iframe to load
+            await new Promise(resolve => iframe.onload = resolve);
+
+            // Get cookies using document.cookie from the iframe
+            const cookies = iframe.contentWindow.document.cookie;
+            
+            // Clean up
+            document.body.removeChild(iframe);
+            
+            return cookies;
+        } catch (error) {
+            console.error('Error getting YouTube cookies:', error);
+            return null;
+        }
+    }
+
     async function processYouTubeLink(url, vibeType) {
         if (!url) {
             showError('Please enter a YouTube URL');
@@ -153,6 +177,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Unable to connect to the server. Please try again later.');
             }
 
+            // Get YouTube cookies
+            const cookies = await getYoutubeCookies();
+            
             loadingDiv.classList.remove('hidden');
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
@@ -162,7 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: getDeviceHeaders(),
                 body: JSON.stringify({
                     url: url,
-                    effect_type: vibeType
+                    effect_type: vibeType,
+                    cookies: cookies
                 })
             });
 
