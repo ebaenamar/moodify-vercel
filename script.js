@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep the original API URL configuration
     const API_URL = window.location.hostname === 'localhost' 
         ? 'http://localhost:5005'
-        : 'https://moodi-fy.onrender.com';  
+        : 'https://moodify-vercel.onrender.com';
 
     const vibes = [
         { emoji: '🌙', type: 'slow_reverb', name: 'Dreamy' },
@@ -137,32 +137,39 @@ document.addEventListener('DOMContentLoaded', () => {
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
 
-            const response = await fetch(`${API_URL}/api/transform`, {  
+            const response = await fetch(`${API_URL}/api/transform`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     url: url,
-                    effect_type: vibeType  
+                    effect_type: vibeType
                 })
             });
 
-            let errorMessage = 'Failed to process audio';
             if (!response.ok) {
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
+                if (response.headers.get('content-type')?.includes('application/json')) {
                     const errorData = await response.json();
-                    errorMessage = errorData.error || errorMessage;
+                    throw new Error(errorData.error || 'Failed to process audio');
                 } else {
-                    const textError = await response.text();
-                    console.error('Server error:', textError);
+                    throw new Error('Failed to process audio');
                 }
-                throw new Error(errorMessage);
             }
 
-            const data = await response.json();
-            processedAudioUrl = data.audio_url;
+            // Get the audio blob directly from the response
+            const blob = await response.blob();
+            if (blob.size === 0) {
+                throw new Error('Received empty audio file');
+            }
+
+            // Revoke the old URL if it exists
+            if (processedAudioUrl) {
+                URL.revokeObjectURL(processedAudioUrl);
+            }
+
+            // Create a new blob URL
+            processedAudioUrl = URL.createObjectURL(blob);
             
             audioClip.src = processedAudioUrl;
             audioClip.classList.remove('hidden');
