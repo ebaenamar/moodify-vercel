@@ -71,74 +71,8 @@ def extract_video_id(url):
         return match.group(1)
     raise ValueError("Could not extract video ID from URL")
 
-def get_fresh_cookies(url):
-    """Dynamically get fresh cookies from YouTube."""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'DNT': '1'
-        }
-        
-        # Get the cookies from YouTube
-        response = requests.get(url, headers=headers, allow_redirects=True)
-        
-        # In Docker environment, use the /app directory
-        cookies_path = '/app/cookies.txt'
-        
-        # Format cookies in Netscape format
-        with open(cookies_path, 'w') as f:
-            f.write("# Netscape HTTP Cookie File\n")
-            f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-            f.write("# This is a generated file!  Do not edit.\n\n")
-            
-            for cookie in response.cookies:
-                secure = "TRUE" if cookie.secure else "FALSE"
-                http_only = "TRUE" if cookie.has_nonstandard_attr('HttpOnly') else "FALSE"
-                expires = str(int(cookie.expires)) if cookie.expires else "0"
-                
-                f.write(f".youtube.com\tTRUE\t{cookie.path}\t{secure}\t{expires}\t{cookie.name}\t{cookie.value}\n")
-        
-        # Set proper permissions for the cookies file
-        os.chmod(cookies_path, 0o644)
-        return cookies_path
-    except Exception as e:
-        logger.error(f"Error getting fresh cookies: {str(e)}")
-        return None
-
-def write_cookies_from_browser(cookies_dict):
-    """Write cookies from browser to cookies.txt file."""
-    try:
-        cookies_path = '/app/cookies.txt'
-        
-        with open(cookies_path, 'w') as f:
-            f.write("# Netscape HTTP Cookie File\n")
-            f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-            f.write("# This is a generated file!  Do not edit.\n\n")
-            
-            # Current time plus 1 year for expiry
-            expires = str(int(time.time()) + 31536000)
-            
-            # Write each cookie in Netscape format
-            for name, value in cookies_dict.items():
-                if value:  # Only write non-empty cookies
-                    f.write(f".youtube.com\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}\n")
-        
-        os.chmod(cookies_path, 0o644)
-        return cookies_path
-    except Exception as e:
-        logger.error(f"Error writing browser cookies: {str(e)}")
-        return None
-
-def download_audio(url, output_path, cookies_path=None):
-    """Download audio from YouTube using yt-dlp with dynamic cookie handling."""
+def download_audio(url, output_path):
+    """Download audio from YouTube using yt-dlp."""
     try:
         # Extract video ID for logging
         video_id = extract_video_id(url)
@@ -164,23 +98,13 @@ def download_audio(url, output_path, cookies_path=None):
                 'extract_flat': False,
                 'nocheckcertificate': True,
                 'noplaylist': True,
+                'cookiefile': 'cookies.txt',  # Use the cookies file we created
                 'http_headers': get_custom_headers()
             }
             
-            if cookies_path:
-                ydl_opts['cookiefile'] = cookies_path
-            
-            success = False
-            error_msg = None
-            
-            # Try with existing cookies first
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 ydl.download([url])
-                success = True
-            
-            if not success:
-                raise ValueError(error_msg or "Failed to download with both existing and fresh cookies")
             
             # Get the output filename and move to final destination
             output_file = os.path.join(temp_dir, f"{info['title']}.mp3")
@@ -390,43 +314,31 @@ def health_check():
 
 @app.route('/api/download', methods=['POST'])
 def download():
+    """Download and process a YouTube video."""
     try:
         data = request.get_json()
-        if not data or 'url' not in data:
+        url = data.get('url')
+        effect_type = data.get('effect_type', 'happy')
+        
+        if not url:
             return jsonify({'error': 'No URL provided'}), 400
-
-        url = data['url']
-        cookies = data.get('cookies')  # This will now be a dictionary
-
-        # Validate YouTube URL
-        if not extract_video_id(url):
-            return jsonify({'error': 'Invalid YouTube URL'}), 400
-
-        # Create a unique filename
-        video_id = extract_video_id(url)
-        output_filename = f"{video_id}_{int(time.time())}.mp3"
-        output_path = os.path.join(OUTPUT_DIR, output_filename)
-
-        # If we received cookies from the browser, use them
-        cookies_path = None
-        if cookies and isinstance(cookies, dict):
-            logger.info("Received cookies from browser, writing to cookies.txt")
-            cookies_path = write_cookies_from_browser(cookies)
-            if cookies_path:
-                logger.info("Successfully wrote browser cookies to file")
-            else:
-                logger.warning("Failed to write browser cookies")
-
+            
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(os.getcwd(), 'downloads')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate unique filename
+        output_filename = f"{uuid.uuid4()}.mp3"
+        output_path = os.path.join(output_dir, output_filename)
+        
         # Download the audio
         try:
-            output_path = download_audio(url, output_path, cookies_path)
+            output_path = download_audio(url, output_path)
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Error downloading audio: {error_msg}")
-            if 'bot' in error_msg.lower():
-                return jsonify({'error': 'YouTube authentication required. Please provide valid cookies.'}), 401
-            return jsonify({'error': str(e)}), 500
-
+            return jsonify({'error': error_msg}), 400
+        
         # Return the file
         return send_file(output_path, as_attachment=True, download_name=output_filename)
 
