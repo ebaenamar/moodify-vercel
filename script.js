@@ -8,8 +8,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const retryButton = document.getElementById('retry');
     const shareButton = document.getElementById('share');
 
-    // Add API URL configuration at the top of the file
-    const API_URL = 'https://moodi-fy.onrender.com';
+    // Keep the original API URL configuration
+    const API_URL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:5005'
+        : 'https://moodify-vercel.onrender.com';
 
     const vibes = [
         { emoji: '🌙', type: 'slow_reverb', name: 'Dreamy' },
@@ -79,11 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const emojiWrapper = document.createElement('div');
         emojiWrapper.classList.add('emoji-wrapper');
         
-        const emoji = document.createElement('span');
-        emoji.textContent = vibe.emoji;
+        const emoji = document.createElement('div');
         emoji.classList.add('emoji');
+        emoji.textContent = vibe.emoji;
         
-        const tooltip = document.createElement('span');
+        const tooltip = document.createElement('div');
         tooltip.classList.add('tooltip');
         tooltip.textContent = vibe.name;
         
@@ -91,9 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
         emojiWrapper.appendChild(tooltip);
         emojiContainer.appendChild(emojiWrapper);
 
-        emoji.addEventListener('click', () => {
-            handleMoodSelection(emoji, vibe);
-        });
+        emoji.addEventListener('click', () => handleMoodSelection(emoji, vibe));
     });
 
     async function processYouTubeLink(url, vibeType) {
@@ -113,36 +113,77 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
+            // Test CORS first (keeping original functionality)
+            try {
+                const testResponse = await fetch(`${API_URL}/api/test`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!testResponse.ok) {
+                    throw new Error('CORS test failed');
+                }
+                
+                const testData = await testResponse.json();
+                console.log('CORS test successful:', testData);
+            } catch (corsError) {
+                console.error('CORS test failed:', corsError);
+                throw new Error('Unable to connect to the server. Please try again later.');
+            }
+
             loadingDiv.classList.remove('hidden');
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
 
-            const response = await fetch(`${API_URL}/api/transform`, {
+            const response = await fetch(`${API_URL}/api/download`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     url: url,
-                    effect_type: vibeType
+                    mood: vibeType
                 })
             });
 
+            let errorMessage = 'Failed to process audio';
             if (!response.ok) {
                 const contentType = response.headers.get('content-type');
                 if (contentType && contentType.includes('application/json')) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to process audio');
+                    errorMessage = errorData.error || errorMessage;
+                } else {
+                    const textError = await response.text();
+                    console.error('Server error:', textError);
                 }
-                throw new Error('Failed to process audio. Please try again or use a different YouTube link.');
+                throw new Error(errorMessage);
             }
 
-            const data = await response.json();
-            processedAudioUrl = data.audio_url;
+            const blob = await response.blob();
+            if (blob.size === 0) {
+                throw new Error('Received empty audio file');
+            }
+            
+            // Revoke the old URL if it exists
+            if (processedAudioUrl) {
+                URL.revokeObjectURL(processedAudioUrl);
+            }
+            
+            processedAudioUrl = URL.createObjectURL(blob);
             
             audioClip.src = processedAudioUrl;
             audioClip.classList.remove('hidden');
             buttonContainer.classList.remove('hidden');
+            
+            // Start playing automatically
+            try {
+                await audioClip.play();
+            } catch (playError) {
+                console.log('Auto-play failed:', playError);
+            }
+            
         } catch (error) {
             showError(error.message || 'An error occurred while processing your request');
         } finally {
@@ -173,29 +214,21 @@ document.addEventListener('DOMContentLoaded', () => {
         processedAudioUrl = null;
     });
 
-    saveButton.addEventListener('click', async () => {
+    saveButton.addEventListener('click', () => {
         if (processedAudioUrl) {
-            try {
-                const link = document.createElement('a');
-                link.href = processedAudioUrl;
-                link.download = 'transformed_audio.mp3';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (error) {
-                showError('Failed to download audio');
-            }
+            const a = document.createElement('a');
+            a.href = processedAudioUrl;
+            a.download = `moodify_${selectedVibe.type}.mp3`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
     });
 
-    shareButton.addEventListener('click', async () => {
+    shareButton.addEventListener('click', () => {
         if (processedAudioUrl) {
-            try {
-                await navigator.clipboard.writeText(processedAudioUrl);
-                alert('Audio URL copied to clipboard!');
-            } catch (error) {
-                showError('Failed to copy URL to clipboard');
-            }
+            // Implement sharing functionality here
+            alert('Sharing coming soon!');
         }
     });
 
