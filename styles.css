@@ -453,17 +453,74 @@ audio.playing {
         grid-template-columns: 1fr;
         padding: 0 1rem;
     }
-    
-    .example-card {
-        padding: 1.5rem;
-        min-height: auto;
+
+    .container {
+        padding: 1rem;
+        margin: 1rem;
+        max-width: 100%;
+        border-radius: 10px;
     }
 
-    .example-card h3 {
-        margin-bottom: 2rem;
+    h1 {
+        font-size: 2.2rem;
     }
 
-    .audio-pair {
-        gap: 2rem;
+    input[type="text"] {
+        font-size: 16px; /* Prevents iOS zoom on focus */
+        padding: 0.8rem;
+    }
+
+    .emoji {
+        font-size: 1.5rem;
+        padding: 0.4rem;
+    }
+
+    .emoji-container {
+        gap: 0.5rem;
+    }
+
+    .button-container {
+        gap: 0.5rem;
+    }
+
+    .neon-button {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
+        min-width: 100px; /* Better touch targets */
+    }
+
+    audio {
+        width: 90%;
+        margin: 1.5rem auto;
+    }
+
+    /* Improve touch targets */
+    audio::-webkit-media-controls-panel {
+        padding: 0 10px;
+    }
+
+    .tooltip {
+        display: none; /* Hide tooltips on mobile */
+    }
+
+    /* Add safe areas for notched phones */
+    @supports (padding: max(0px)) {
+        .container {
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+    }
+}
+
+/* Add specific iPad styles */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .container {
+        max-width: 90%;
+        margin: 2rem;
+    }
+
+    .emoji {
+        font-size: 1.6rem;
     }
 }
