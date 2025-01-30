@@ -59,87 +59,83 @@ def get_custom_headers():
     """Get custom headers for YouTube requests."""
     return {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
         'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
     }
 
 def extract_video_id(url):
-    """Extract the video ID from various YouTube URL formats."""
-    patterns = [
-        r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
-        r'(?:embed\/)([0-9A-Za-z_-]{11})',
-        r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
+    """Extract video ID from various YouTube URL formats."""
+    if match := re.search(r'(?:v=|/v/|youtu\.be/)([^"&?/\s]{11})', url):
+        return match.group(1)
+    raise ValueError("Could not extract video ID from URL")
 
 def download_audio(url, output_path):
-    """Download audio from YouTube using yt-dlp."""
+    """Download audio from YouTube using yt-dlp with simplified approach."""
     try:
-        logger.info(f"Downloading audio from {url}")
+        # Extract video ID for logging
+        video_id = extract_video_id(url)
+        logger.info(f"Processing video ID: {video_id}")
         
-        # Get cookies file path
-        cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
-        if not os.path.exists(cookies_path):
-            logger.warning("Cookies file not found, proceeding without authentication")
+        # Create temporary directory for download
+        temp_dir = os.path.join(os.path.dirname(output_path), 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
         
-        # Configure yt-dlp options
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_path,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': False,
-            'no_warnings': False,
-            'verbose': True,
-            'extract_flat': False,
-            'force_generic_extractor': False,
-            'nocheckcertificate': True,
-            'noplaylist': True,
-            'concurrent_fragment_downloads': 1,
-            'http_headers': get_custom_headers(),
-            'progress_hooks': [lambda d: logger.info(f"Download progress: {d.get('status', 'unknown')}")],
-        }
-        
-        # Add cookies if available
-        if os.path.exists(cookies_path):
-            logger.info("Using authentication cookies")
-            ydl_opts['cookiefile'] = cookies_path
-        
-        # Download with yt-dlp
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            logger.info("Starting download with yt-dlp")
-            ydl.download([url])
-        
-        # Check for the output file
-        mp3_path = output_path + '.mp3'
-        if not os.path.exists(mp3_path):
-            raise ValueError("Failed to create output file")
-        
-        logger.info("Download and conversion completed successfully")
-        return mp3_path
+        try:
+            # Configure yt-dlp options
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
+                'nocheckcertificate': True,
+                'noplaylist': True,
+                'http_headers': get_custom_headers()
+            }
             
+            # Download with yt-dlp
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Get video info first
+                info = ydl.extract_info(url, download=False)
+                
+                # Download the video
+                ydl.download([url])
+                
+                # Get the output filename
+                output_file = os.path.join(temp_dir, f"{info['title']}.mp3")
+                
+                # Move to final destination
+                os.rename(output_file, output_path)
+                
+            logger.info(f"Successfully downloaded and converted audio to: {output_path}")
+            return output_path
+            
+        finally:
+            # Clean up temp files
+            for file in os.listdir(temp_dir):
+                try:
+                    os.remove(os.path.join(temp_dir, file))
+                except OSError:
+                    pass
+            try:
+                os.rmdir(temp_dir)
+            except OSError:
+                pass
+        
     except Exception as e:
-        logger.error(f"Error downloading audio: {str(e)}")
+        logger.error(f"Error in download process: {str(e)}")
         logger.error(traceback.format_exc())
         
-        # Clean up any partial downloads
-        try:
-            mp3_path = output_path + '.mp3'
-            if os.path.exists(mp3_path):
-                os.remove(mp3_path)
-        except Exception:
-            pass
-        
+        # Clean up output file if it exists
+        if os.path.exists(output_path):
+            os.remove(output_path)
+            
         if 'unavailable' in str(e).lower():
             raise ValueError("This video is unavailable. It might be private or removed.")
         elif 'copyright' in str(e).lower():
