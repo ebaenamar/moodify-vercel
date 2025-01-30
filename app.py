@@ -16,22 +16,20 @@ import time
 app = Flask(__name__)
 
 # Configure CORS
-CORS(app, 
-     resources={
-         r"/api/*": {
-             "origins": [
-                 "https://moodi-fy.vercel.app",
-                 "http://localhost:3000"
-             ],
-             "methods": ["GET", "POST", "OPTIONS"],
-             "allow_headers": ["Content-Type"],
-             "expose_headers": ["Content-Type"],
-             "supports_credentials": True
-         }
-     },
-     allow_headers=["Content-Type"],
-     expose_headers=["Content-Type"]
-)
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://moodi-fy.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:5000",
+            "http://127.0.0.1:5000"
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Device-Info"],
+        "expose_headers": ["Content-Disposition"],
+        "supports_credentials": True
+    }
+})
 
 @app.after_request
 def after_request(response):
@@ -71,8 +69,74 @@ def extract_video_id(url):
         return match.group(1)
     raise ValueError("Could not extract video ID from URL")
 
-def download_audio(url, output_path):
-    """Download audio from YouTube using yt-dlp."""
+def get_fresh_cookies(url):
+    """Dynamically get fresh cookies from YouTube."""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'DNT': '1'
+        }
+        
+        # Get the cookies from YouTube
+        response = requests.get(url, headers=headers, allow_redirects=True)
+        
+        # In Docker environment, use the /app directory
+        cookies_path = '/app/cookies.txt'
+        
+        # Format cookies in Netscape format
+        with open(cookies_path, 'w') as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
+            f.write("# This is a generated file!  Do not edit.\n\n")
+            
+            for cookie in response.cookies:
+                secure = "TRUE" if cookie.secure else "FALSE"
+                http_only = "TRUE" if cookie.has_nonstandard_attr('HttpOnly') else "FALSE"
+                expires = str(int(cookie.expires)) if cookie.expires else "0"
+                
+                f.write(f".youtube.com\tTRUE\t{cookie.path}\t{secure}\t{expires}\t{cookie.name}\t{cookie.value}\n")
+        
+        # Set proper permissions for the cookies file
+        os.chmod(cookies_path, 0o644)
+        return cookies_path
+    except Exception as e:
+        logger.error(f"Error getting fresh cookies: {str(e)}")
+        return None
+
+def write_cookies_from_browser(cookies_str):
+    """Write cookies from browser to cookies.txt file."""
+    try:
+        cookies_path = '/app/cookies.txt'
+        
+        with open(cookies_path, 'w') as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
+            f.write("# This is a generated file!  Do not edit.\n\n")
+            
+            # Parse cookies string from browser
+            for cookie in cookies_str.split(';'):
+                if '=' in cookie:
+                    name, value = cookie.strip().split('=', 1)
+                    # Set a default expiration of 1 year from now
+                    expires = str(int(time.time()) + 31536000)
+                    f.write(f".youtube.com\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}\n")
+        
+        os.chmod(cookies_path, 0o644)
+        return cookies_path
+    except Exception as e:
+        logger.error(f"Error writing browser cookies: {str(e)}")
+        return None
+
+def download_audio(url, output_path, cookies_path=None):
+    """Download audio from YouTube using yt-dlp with dynamic cookie handling."""
     try:
         # Extract video ID for logging
         video_id = extract_video_id(url)
@@ -98,13 +162,23 @@ def download_audio(url, output_path):
                 'extract_flat': False,
                 'nocheckcertificate': True,
                 'noplaylist': True,
-                'cookiefile': 'cookies.txt',  # Use the cookies file we created
                 'http_headers': get_custom_headers()
             }
             
+            if cookies_path:
+                ydl_opts['cookiefile'] = cookies_path
+            
+            success = False
+            error_msg = None
+            
+            # Try with existing cookies first
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 ydl.download([url])
+                success = True
+            
+            if not success:
+                raise ValueError(error_msg or "Failed to download with both existing and fresh cookies")
             
             # Get the output filename and move to final destination
             output_file = os.path.join(temp_dir, f"{info['title']}.mp3")
@@ -295,13 +369,10 @@ def root():
         ]
     })
 
-@app.route('/api/test', methods=['GET'])
-def test():
-    """Test endpoint to verify CORS is working"""
-    return jsonify({
-        'status': 'ok',
-        'message': 'CORS is working'
-    })
+@app.route('/api/test', methods=['GET', 'OPTIONS'])
+def test_cors():
+    """Test endpoint for CORS"""
+    return jsonify({'status': 'ok'})
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -312,33 +383,49 @@ def health_check():
         'output_dir': OUTPUT_DIR
     }), 200
 
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/api/download', methods=['POST'])
 def download():
-    """Download and process a YouTube video."""
     try:
         data = request.get_json()
-        url = data.get('url')
-        effect_type = data.get('effect_type', 'happy')
-        
-        if not url:
+        if not data or 'url' not in data:
             return jsonify({'error': 'No URL provided'}), 400
-            
-        # Create output directory if it doesn't exist
-        output_dir = os.path.join(os.getcwd(), 'downloads')
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Generate unique filename
-        output_filename = f"{uuid.uuid4()}.mp3"
-        output_path = os.path.join(output_dir, output_filename)
-        
+
+        url = data['url']
+        cookies = data.get('cookies')  # Get cookies from request if available
+
+        # Validate YouTube URL
+        if not extract_video_id(url):
+            return jsonify({'error': 'Invalid YouTube URL'}), 400
+
+        # Create a unique filename
+        video_id = extract_video_id(url)
+        output_filename = f"{video_id}_{int(time.time())}.mp3"
+        output_path = os.path.join(OUTPUT_DIR, output_filename)
+
+        # If we received cookies from the browser, use them
+        if cookies:
+            logger.info("Received cookies from browser, writing to cookies.txt")
+            cookies_path = write_cookies_from_browser(cookies)
+            if cookies_path:
+                logger.info("Successfully wrote browser cookies to file")
+        else:
+            cookies_path = None
+
         # Download the audio
         try:
-            output_path = download_audio(url, output_path)
+            output_path = download_audio(url, output_path, cookies_path)
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Error downloading audio: {error_msg}")
-            return jsonify({'error': error_msg}), 400
-        
+            logger.error(f"Error downloading audio: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
         # Return the file
         return send_file(output_path, as_attachment=True, download_name=output_filename)
 
