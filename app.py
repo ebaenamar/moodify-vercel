@@ -31,6 +31,39 @@ CORS(app, resources={
     }
 })
 
+def validate_youtube_cookies():
+    """
+    Validate that the cookies.txt file exists and is working properly.
+    Returns True if cookies are valid, False otherwise.
+    """
+    try:
+        logger.info("Validating YouTube cookies...")
+        if not os.path.exists('cookies.txt'):
+            logger.error("cookies.txt file not found!")
+            return False
+            
+        # Test video ID (a popular video that's unlikely to be taken down)
+        test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'cookiefile': os.path.abspath('cookies.txt')
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(test_url, download=False)
+            if info and 'title' in info:
+                logger.info("YouTube cookies validated successfully!")
+                return True
+            else:
+                logger.error("Cookie validation failed: couldn't extract video info")
+                return False
+    except Exception as e:
+        logger.error(f"Cookie validation failed with error: {str(e)}")
+        return False
+
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
@@ -69,151 +102,77 @@ def extract_video_id(url):
         return match.group(1)
     raise ValueError("Could not extract video ID from URL")
 
-def get_fresh_cookies(url):
-    """Dynamically get fresh cookies from YouTube."""
+def get_fresh_cookies_docker(url):
+    """Get fresh cookies using yt-dlp's --cookies-from-browser in Docker."""
+    logger.info("Attempting to get fresh cookies in Docker environment")
+    cookies_path = os.path.join(TEMP_DIR, 'fresh_cookies.txt')
+    
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'DNT': '1'
+        # Configure yt-dlp options for cookie extraction
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'cookiesfrombrowser': ('chrome', None),  # Use Chrome without specific profile
         }
         
-        # Get the cookies from YouTube
-        response = requests.get(url, headers=headers, allow_redirects=True)
-        
-        # In Docker environment, use the /app directory
-        cookies_path = '/app/cookies.txt'
-        
-        # Format cookies in Netscape format
-        with open(cookies_path, 'w') as f:
-            f.write("# Netscape HTTP Cookie File\n")
-            f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-            f.write("# This is a generated file!  Do not edit.\n\n")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            logger.info("Extracting cookies from Chrome")
+            ydl.extract_info(url, download=False)
             
-            for cookie in response.cookies:
-                secure = "TRUE" if cookie.secure else "FALSE"
-                http_only = "TRUE" if cookie.has_nonstandard_attr('HttpOnly') else "FALSE"
-                expires = str(int(cookie.expires)) if cookie.expires else "0"
-                
-                f.write(f".youtube.com\tTRUE\t{cookie.path}\t{secure}\t{expires}\t{cookie.name}\t{cookie.value}\n")
-        
-        # Set proper permissions for the cookies file
-        os.chmod(cookies_path, 0o644)
-        return cookies_path
+            # The cookies should now be in yt-dlp's cookie jar
+            # We need to save them to a file
+            if hasattr(ydl, '_get_cookies'):
+                cookies = ydl._get_cookies(url)
+                with open(cookies_path, 'w') as f:
+                    for cookie in cookies:
+                        f.write(f'{cookie.domain}\tTRUE\t{cookie.path}\t'
+                               f'{"TRUE" if cookie.secure else "FALSE"}\t{cookie.expires}\t'
+                               f'{cookie.name}\t{cookie.value}\n')
+                logger.info(f"Successfully saved fresh cookies to {cookies_path}")
+                return cookies_path
     except Exception as e:
-        logger.error(f"Error getting fresh cookies: {str(e)}")
-        return None
-
-def write_cookies_from_browser(cookies_str):
-    """Write cookies from browser to cookies.txt file."""
-    try:
-        cookies_path = '/app/cookies.txt'
-        
-        with open(cookies_path, 'w') as f:
-            f.write("# Netscape HTTP Cookie File\n")
-            f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-            f.write("# This is a generated file!  Do not edit.\n\n")
-            
-            # Parse cookies string from browser
-            for cookie in cookies_str.split(';'):
-                if '=' in cookie:
-                    name, value = cookie.strip().split('=', 1)
-                    # Set a default expiration of 1 year from now
-                    expires = str(int(time.time()) + 31536000)
-                    f.write(f".youtube.com\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}\n")
-        
-        os.chmod(cookies_path, 0o644)
-        return cookies_path
-    except Exception as e:
-        logger.error(f"Error writing browser cookies: {str(e)}")
-        return None
+        logger.error(f"Error getting fresh cookies in Docker: {str(e)}")
+    
+    return None
 
 def download_audio(url, output_path, cookies_path=None):
-    """Download audio from YouTube using yt-dlp with dynamic cookie handling."""
+    """Download audio from a YouTube video."""
     try:
-        # Extract video ID for logging
-        video_id = extract_video_id(url)
-        logger.info(f"Processing video ID: {video_id}")
-        
-        # Create temporary directory for download
-        temp_dir = os.path.join(os.path.dirname(output_path), 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        os.chmod(temp_dir, 0o777)  # Ensure write permissions in Docker
-        
-        try:
-            # Configure yt-dlp options
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-                'nocheckcertificate': True,
-                'noplaylist': True,
-                'http_headers': get_custom_headers()
-            }
+        # Validate cookies before attempting download
+        if not validate_youtube_cookies():
+            logger.error("Cookie validation failed before download attempt")
+            raise Exception("YouTube cookies are invalid or expired. Please refresh cookies and redeploy.")
+
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': output_path,
+            'quiet': True,
+            'no_warnings': True
+        }
+
+        if cookies_path and os.path.exists('cookies.txt'):
+            logger.info("Using existing cookies.txt file")
+            cookies_path = os.path.abspath('cookies.txt')
+            ydl_opts['cookiefile'] = cookies_path
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            logger.info(f"Downloading audio from: {url}")
+            ydl.download([url])
             
-            if cookies_path:
-                ydl_opts['cookiefile'] = cookies_path
+        if not os.path.exists(output_path):
+            raise Exception(f"Download completed but file not found at {output_path}")
             
-            success = False
-            error_msg = None
-            
-            # Try with existing cookies first
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                ydl.download([url])
-                success = True
-            
-            if not success:
-                raise ValueError(error_msg or "Failed to download with both existing and fresh cookies")
-            
-            # Get the output filename and move to final destination
-            output_file = os.path.join(temp_dir, f"{info['title']}.mp3")
-            os.rename(output_file, output_path)
-            os.chmod(output_path, 0o644)  # Ensure readable permissions
-            
-            logger.info(f"Successfully downloaded and converted audio to: {output_path}")
-            return output_path
-            
-        finally:
-            # Clean up temp files
-            for file in os.listdir(temp_dir):
-                try:
-                    os.remove(os.path.join(temp_dir, file))
-                except OSError:
-                    pass
-            try:
-                os.rmdir(temp_dir)
-            except OSError:
-                pass
-        
+        return True
+
     except Exception as e:
-        logger.error(f"Error in download process: {str(e)}")
-        logger.error(traceback.format_exc())
-        
-        # Clean up output file if it exists
-        if os.path.exists(output_path):
-            os.remove(output_path)
-            
-        if 'unavailable' in str(e).lower():
-            raise ValueError("This video is unavailable. It might be private or removed.")
-        elif 'copyright' in str(e).lower():
-            raise ValueError("This video is not available due to copyright restrictions.")
-        else:
-            raise ValueError(f"Failed to download video: {str(e)}")
+        logger.error(f"Error downloading audio: {str(e)}")
+        raise
 
 def apply_audio_effect(input_path, output_path, effect_type='slow_reverb'):
     """Apply audio effect using FFmpeg."""
@@ -429,9 +388,20 @@ def download():
         # 1. Try cookies from request
         if cookies:
             logger.info("Received cookies from browser, writing to cookies.txt")
-            cookies_path = write_cookies_from_browser(cookies)
-            if cookies_path:
-                logger.info("Successfully wrote browser cookies to file")
+            cookies_path = os.path.join(TEMP_DIR, 'cookies.txt')
+            with open(cookies_path, 'w') as f:
+                f.write("# Netscape HTTP Cookie File\n")
+                f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
+                f.write("# This is a generated file!  Do not edit.\n\n")
+                
+                # Parse cookies string from browser
+                for cookie in cookies.split(';'):
+                    if '=' in cookie:
+                        name, value = cookie.strip().split('=', 1)
+                        # Set a default expiration of 1 year from now
+                        expires = str(int(time.time()) + 31536000)
+                        f.write(f".youtube.com\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}\n")
+            logger.info(f"Successfully wrote browser cookies to file")
         
         # 2. If no cookies in request or writing failed, try using cookies.txt
         if not cookies_path and os.path.exists('cookies.txt'):
@@ -517,6 +487,11 @@ def transform_audio():
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 if __name__ == '__main__':
+    # Validate cookies on startup
+    if not validate_youtube_cookies():
+        logger.error("⚠️ WARNING: YouTube cookies validation failed! The application may not work correctly.")
+        logger.error("Please run ./update_cookies.sh to refresh your cookies and redeploy.")
+    
     port = int(os.environ.get('PORT', 5005))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)
