@@ -73,18 +73,123 @@ Available effects:
 - `dark`: Low-end boost + atmosphere
 - `cute`: High-end enhance + pitch
 
-## Authentication System
+## API Documentation
 
-### Cookie Management
-```bash
-# Update cycle
-update_cookies.sh -> validate_cookies.py -> cookies.txt
+### POST /api/download
+- **Purpose**: Process YouTube URL and apply audio effect
+- **Headers**:
+  - `Content-Type: application/json`
+  - `X-Device-Info`: (optional) Device information
+- **Request Body**:
+```json
+{
+    "url": "YouTube URL",
+    "effect_type": "slow_reverb|energetic|dark|cute"
+}
 ```
+- **Authentication**:
+  - Uses cookies.txt for YouTube access
+  - Handles age-restricted content
+  - Manages authentication state
+- **Response**:
+```json
+{
+    "success": true,
+    "filename": "processed_audio_file.mp3"
+}
+```
+- **Error Response**:
+```json
+{
+    "error": "Error message"
+}
+```
+- **Status Codes**:
+  - 200: Success
+  - 400: Invalid request
+  - 401: Authentication failed (cookie issues)
+  - 500: Server error
 
-Key components:
-- `update_cookies.sh`: Automated cookie updater
-- `validate_cookies.py`: Cookie validator
-- `cookies.txt`: Cookie storage
+### GET /api/audio/<filename>
+- **Purpose**: Serve processed audio files
+- **Headers**:
+  - `Range`: (optional) For partial content requests
+- **Response**: Audio file (MP3)
+- **Error Response**: JSON with error message
+- **Status Codes**:
+  - 200: Full content
+  - 206: Partial content
+  - 404: File not found
+  - 500: Server error
+
+## Cookie Management Workflow
+
+### Overview
+The application uses a two-stage cookie management system:
+1. Local cookie extraction and validation (Developer's machine)
+2. Remote cookie usage (Render's Docker environment)
+
+### Local Stage (Developer's Machine)
+1. **Cookie Extraction**
+   ```bash
+   # Run update_cookies.sh locally
+   ./update_cookies.sh
+   ```
+   - Extracts fresh cookies from local Chrome browser
+   - Uses existing authenticated YouTube session
+   - No need for password storage
+
+2. **Validation Process**
+   - Tests cookies with a sample video
+   - Verifies authentication works
+   - Creates backup of existing cookies
+
+3. **Deployment**
+   - Commits validated cookies to git
+   - Pushes to repository
+   - Maintains cookie security
+
+### Remote Stage (Render Docker)
+1. **Cookie Update**
+   - Docker pulls latest code
+   - Gets fresh cookies.txt
+   - No browser automation needed
+
+2. **Usage**
+   - Backend uses cookies for downloads
+   - Handles age-restricted content
+   - Maintains authentication state
+
+### Testing the Workflow
+
+1. **Local Testing**
+   ```bash
+   # 1. Run update script
+   ./update_cookies.sh
+
+   # 2. Check git status
+   git status
+
+   # 3. Verify push
+   git log --oneline
+   ```
+
+2. **Remote Verification**
+   - Check Render logs
+   - Try downloading age-restricted video
+   - Monitor for authentication errors
+
+### Security Considerations
+
+1. **Cookie Protection**
+   - Cookies only extracted locally
+   - No credentials stored in cloud
+   - Regular cookie rotation
+
+2. **Access Control**
+   - Limited to authenticated developers
+   - Secure cookie transfer
+   - Protected repository access
 
 ## Error Handling
 
@@ -163,7 +268,7 @@ python -m http.server 3000
 vercel.json:
 {
     "routes": [
-        { "src": "/api/(.*)", "dest": "https://moodify-vercel.onrender.com/api/$1" }
+        { "src": "/api/(.*)", "dest": "https://moodi-fy.onrender.com/api/$1" }
     ]
 }
 ```
@@ -208,7 +313,7 @@ def secure_filename(filename):
     validate_extension()
 ```
 
-## Debugging Guide
+## Troubleshooting Guide
 
 ### Frontend Issues
 1. Network tab in DevTools
