@@ -35,6 +35,22 @@ ENV PORT=10000
 # Update yt-dlp to latest version
 RUN yt-dlp -U
 
+# Create and run cookie validation script
+RUN echo '#!/usr/bin/env python3\n\
+import sys\n\
+from app import validate_youtube_cookies\n\
+\n\
+if not validate_youtube_cookies():\n\
+    print("\\n❌ ERROR: YouTube cookie validation failed!")\n\
+    print("The cookies.txt file exists but is not working in the Docker environment.")\n\
+    print("Please run ./update_cookies.sh to refresh your cookies and try again.\\n")\n\
+    sys.exit(1)\n\
+else:\n\
+    print("\\n✅ YouTube cookies validated successfully in Docker!\\n")\n\
+' > validate_cookies.py && \
+    chmod +x validate_cookies.py && \
+    python3 validate_cookies.py
+
 # Expose port
 EXPOSE ${PORT}
 

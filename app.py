@@ -517,8 +517,21 @@ def transform_audio():
 if __name__ == '__main__':
     # Validate cookies on startup
     if not validate_youtube_cookies():
-        logger.error("⚠️ WARNING: YouTube cookies validation failed! The application may not work correctly.")
-        logger.error("Please run ./update_cookies.sh to refresh your cookies and redeploy.")
+        print("\n" + "="*80)
+        print("⚠️  WARNING: YouTube Cookie Validation Failed!")
+        print("="*80)
+        print("The application will start, but YouTube downloads may not work.")
+        print("This usually means one of:")
+        print("1. The cookies.txt file is missing or invalid")
+        print("2. The cookies have expired")
+        print("3. YouTube is detecting the request as automated")
+        print("\nTo fix this:")
+        print("1. Run ./update_cookies.sh to refresh your cookies")
+        print("2. Commit and push the new cookies.txt")
+        print("3. Redeploy the application")
+        print("="*80 + "\n")
+    else:
+        print("\n✅ YouTube cookies validated successfully! The application is ready.\n")
     
     port = int(os.environ.get('PORT', 5005))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
