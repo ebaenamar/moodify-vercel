@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep the original API URL configuration
     const API_URL = window.location.hostname === 'localhost' 
         ? 'http://localhost:5005'
-        : 'https://moodi-fy.onrender.com';
+        : 'https://moodify-vercel.onrender.com';
 
     const vibes = [
         { emoji: '🌙', type: 'slow_reverb', name: 'Dreamy' },
@@ -64,23 +64,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to get device-specific headers
     function getDeviceHeaders() {
-        const defaultHeaders = {
-            'Content-Type': 'application/json'
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
         };
 
-        // Add mobile headers only if on a mobile device
+        // Only add device info if needed
         if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-            return {
-                ...defaultHeaders,
-                'User-Agent': navigator.userAgent,
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-                'Accept-Language': navigator.language || 'en',
-                'X-Device-Type': /iPhone|iPad|iPod/.test(navigator.userAgent) ? 'ios' : 'android'
-            };
+            headers['X-Device-Info'] = navigator.userAgent;
         }
 
-        return defaultHeaders;
+        return headers;
     }
 
     // Function to handle mood selection
@@ -153,26 +147,72 @@ document.addEventListener('DOMContentLoaded', () => {
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
 
-            console.log(`Making request to ${API_URL}/api/download with effect: ${vibeType}`);
-            const response = await fetch(`${API_URL}/api/download`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...getDeviceHeaders()
-                },
-                body: JSON.stringify({
-                    url: url,
-                    effect_type: vibeType
-                })
+            // Log device and network info
+            console.log('Device Info:', {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                vendor: navigator.vendor,
+                connection: navigator.connection ? {
+                    type: navigator.connection.effectiveType,
+                    downlink: navigator.connection.downlink,
+                    rtt: navigator.connection.rtt
+                } : 'Not available'
             });
+
+            const endpoint = `${API_URL}/api/download`;
+            console.log(`Making request to ${endpoint} with effect: ${vibeType}`);
+            
+            const headers = getDeviceHeaders();
+            console.log('Request headers:', headers);
+
+            // Test endpoint availability
+            try {
+                const testResponse = await fetch(API_URL);
+                console.log('API endpoint test response:', testResponse.status);
+            } catch (testError) {
+                console.error('API endpoint test failed:', testError);
+            }
+
+            // Make the actual request
+            let response;
+            try {
+                response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        url: url,
+                        effect_type: vibeType
+                    })
+                });
+            } catch (fetchError) {
+                console.error('Fetch error details:', {
+                    name: fetchError.name,
+                    message: fetchError.message,
+                    cause: fetchError.cause,
+                    stack: fetchError.stack
+                });
+                throw new Error(`Network error: ${fetchError.message}`);
+            }
 
             console.log('Response status:', response.status);
             console.log('Response headers:', Object.fromEntries([...response.headers]));
 
             if (!response.ok) {
-                const errorData = await response.json().catch(e => ({ error: 'Failed to parse error response' }));
-                console.error('Error response:', errorData);
-                throw new Error(errorData.error || 'Failed to process YouTube link');
+                let errorMessage = `Server error (${response.status})`;
+                try {
+                    const errorData = await response.json();
+                    console.error('Error response:', errorData);
+                    errorMessage = errorData.error || errorMessage;
+                } catch (e) {
+                    console.error('Failed to parse error response:', e);
+                    try {
+                        const textError = await response.text();
+                        console.error('Raw error response:', textError);
+                    } catch (textError) {
+                        console.error('Failed to get error text:', textError);
+                    }
+                }
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
@@ -182,19 +222,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(data.error || 'Failed to process audio');
             }
 
+            // Log the audio request
             console.log(`Fetching audio from ${API_URL}/api/audio/${data.filename}`);
-            const audioResponse = await fetch(`${API_URL}/api/audio/${data.filename}`);
-            
-            console.log('Audio response status:', audioResponse.status);
-            console.log('Audio response headers:', Object.fromEntries([...audioResponse.headers]));
-
-            if (!audioResponse.ok) {
-                const audioError = await audioResponse.text().catch(() => 'Failed to fetch audio');
-                console.error('Audio error:', audioError);
-                throw new Error('Failed to fetch processed audio');
+            let audioResponse;
+            try {
+                audioResponse = await fetch(`${API_URL}/api/audio/${data.filename}`);
+                console.log('Audio response status:', audioResponse.status);
+                console.log('Audio response headers:', Object.fromEntries([...audioResponse.headers]));
+            } catch (audioFetchError) {
+                console.error('Audio fetch error:', audioFetchError);
+                throw new Error(`Failed to fetch audio: ${audioFetchError.message}`);
             }
 
-            // Get the audio blob
+            if (!audioResponse.ok) {
+                let audioError = 'Failed to fetch audio file';
+                try {
+                    const audioErrorData = await audioResponse.text();
+                    console.error('Audio error response:', audioErrorData);
+                    audioError = audioErrorData || audioError;
+                } catch (e) {
+                    console.error('Failed to parse audio error:', e);
+                }
+                throw new Error(audioError);
+            }
+
             const blob = await audioResponse.blob();
             console.log('Audio blob size:', blob.size, 'type:', blob.type);
 
@@ -202,32 +253,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Received empty audio file');
             }
 
-            // Check if it's actually an audio file
             if (!blob.type.startsWith('audio/')) {
+                console.error('Invalid blob type:', blob.type);
                 throw new Error('Invalid audio file received');
             }
 
-            // Revoke the old URL if it exists
             if (processedAudioUrl) {
                 URL.revokeObjectURL(processedAudioUrl);
             }
 
-            // Create a new blob URL
             processedAudioUrl = URL.createObjectURL(blob);
-            
             audioClip.src = processedAudioUrl;
             audioClip.classList.remove('hidden');
             buttonContainer.classList.remove('hidden');
-            
-            // Start playing automatically
+
             try {
                 await audioClip.play();
             } catch (playError) {
                 console.error('Auto-play failed:', playError);
             }
-            
+
         } catch (error) {
-            console.error('Processing error:', error);
+            console.error('Processing error:', {
+                message: error.message,
+                stack: error.stack,
+                cause: error.cause
+            });
             showError(error.message || 'An error occurred while processing your request');
         } finally {
             loadingDiv.classList.add('hidden');

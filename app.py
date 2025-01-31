@@ -22,29 +22,58 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "https://moodi-fy.vercel.app",
+            "https://moodify-vercel.vercel.app",
             "http://localhost:3000",
             "http://localhost:5000",
             "http://127.0.0.1:5000",
-            "https://moodi-fy-ebaenamar.vercel.app",  # Add Vercel preview deployments
-            "https://*.vercel.app"  # Allow all Vercel subdomains
+            "https://*.vercel.app",
+            "capacitor://*",  # For mobile apps
+            "ionic://*"       # For mobile apps
         ],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Device-Info", "Range"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Device-Info", "Range", "Accept", "Origin"],
         "expose_headers": ["Content-Disposition", "Content-Range", "Content-Length", "Accept-Ranges"],
         "supports_credentials": True,
         "max_age": 600
     }
 })
 
+def get_client_ip():
+    """Get the real client IP accounting for proxies."""
+    if 'Cf-Connecting-Ip' in request.headers:
+        return request.headers['Cf-Connecting-Ip']
+    if 'X-Forwarded-For' in request.headers:
+        return request.headers['X-Forwarded-For'].split(',')[0].strip()
+    return request.remote_addr
+
 # Add CORS headers to all responses
 @app.after_request
 def after_request(response):
-    # Allow requests from any origin for mobile support
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Device-Info,Range')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    response.headers.add('Access-Control-Expose-Headers', 'Content-Disposition,Content-Range,Content-Length,Accept-Ranges')
+    """Add CORS headers to all responses."""
+    origin = request.headers.get('Origin')
+    
+    # Log the origin and request details
+    app.logger.info(f"Request Origin: {origin}")
+    app.logger.info(f"Client IP: {get_client_ip()}")
+    
+    # Only allow specific origins
+    if origin:
+        if origin.startswith(('https://moodify-vercel.vercel.app', 'http://localhost', 'capacitor://', 'ionic://')):
+            response.headers['Access-Control-Allow-Origin'] = origin
+    
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Device-Info, Range, Accept, Origin'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Disposition, Content-Range, Content-Length, Accept-Ranges'
+    response.headers['Access-Control-Max-Age'] = '600'
+    
+    # Add security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        return response
+        
     return response
 
 @app.before_request
@@ -455,11 +484,18 @@ def not_found(error):
 def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/api/download', methods=['POST'])
+@app.route('/api/download', methods=['POST', 'OPTIONS'])
 def process_youtube():
     """Process a YouTube video URL."""
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        return '', 204
+        
     try:
-        app.logger.info(f"Processing request from {'mobile' if is_mobile_request() else 'desktop'} device")
+        is_mobile = is_mobile_request()
+        client_ip = get_client_ip()
+        app.logger.info(f"Processing request from {'mobile' if is_mobile else 'desktop'} device. Client IP: {client_ip}")
+        
         if not request.is_json:
             app.logger.error("Request must be JSON")
             return jsonify({'error': 'Request must be JSON'}), 400
