@@ -25,10 +25,11 @@ RUN mkdir -p /app/temp/output && \
 # Copy application code
 COPY . .
 
-# Verify cookie file exists and has correct permissions
+# Set up file permissions while still root
 RUN ls -l cookies.txt || (echo "cookies.txt not found!" && exit 1) && \
     chown app:app cookies.txt && \
     chmod 644 cookies.txt && \
+    chmod +x validate_cookies.py && \
     # Print cookie file info for debugging
     echo "Cookie file details:" && \
     ls -l cookies.txt && \
@@ -52,9 +53,8 @@ RUN echo "Testing cookie file access..." && \
     cat cookies.txt > /dev/null && \
     echo "Cookie file is readable!"
 
-# Validate cookies during build
-RUN chmod +x validate_cookies.py && \
-    python3 validate_cookies.py
+# Validate cookies
+RUN python3 validate_cookies.py
 
 # Expose port
 EXPOSE ${PORT}
