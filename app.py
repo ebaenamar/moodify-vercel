@@ -22,7 +22,7 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "https://moodify-vercel.vercel.app",
+            "https://moodi-fy.vercel.app",
             "http://localhost:3000",
             "http://localhost:5000",
             "http://127.0.0.1:5000",
@@ -58,7 +58,7 @@ def after_request(response):
     
     # Only allow specific origins
     if origin:
-        if origin.startswith(('https://moodify-vercel.vercel.app', 'http://localhost', 'capacitor://', 'ionic://')):
+        if origin.startswith(('https://moodi-fy.vercel.app', 'http://localhost', 'capacitor://', 'ionic://')):
             response.headers['Access-Control-Allow-Origin'] = origin
     
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'

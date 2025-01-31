@@ -8,6 +8,10 @@ Moodify is a web-based tool that allows users to transform a YouTube video or so
 - Loading animation while processing
 - Options to save, retry, or share the audio clip
 
+## 🚀 Quick Start
+
+1. Visit [https://moodi-fy.vercel.app](https://moodi-fy.vercel.app)
+
 ## Installation
 1. Clone the repository.
 2. Open `index.html` in your browser.

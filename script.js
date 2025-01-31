@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep the original API URL configuration
     const API_URL = window.location.hostname === 'localhost' 
         ? 'http://localhost:5005'
-        : 'https://moodify-vercel.onrender.com';
+        : 'https://moodi-fy.onrender.com';
 
     const vibes = [
         { emoji: '🌙', type: 'slow_reverb', name: 'Dreamy' },
