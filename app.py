@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 import requests
 import moviepy.editor as mp
 import time
+import datetime
 
 app = Flask(__name__)
 
@@ -38,9 +39,29 @@ def validate_youtube_cookies():
     """
     try:
         logger.info("Validating YouTube cookies...")
+        
+        # Log current working directory and cookie file location
+        cwd = os.getcwd()
+        cookie_path = os.path.abspath('cookies.txt')
+        logger.info(f"Current working directory: {cwd}")
+        logger.info(f"Looking for cookies at: {cookie_path}")
+        
         if not os.path.exists('cookies.txt'):
             logger.error("cookies.txt file not found!")
             return False
+            
+        # Log cookie file size and last modified time
+        cookie_stats = os.stat('cookies.txt')
+        logger.info(f"Cookie file size: {cookie_stats.st_size} bytes")
+        logger.info(f"Cookie file last modified: {datetime.datetime.fromtimestamp(cookie_stats.st_mtime)}")
+        
+        # Log first few lines of cookie file (without sensitive data)
+        with open('cookies.txt', 'r') as f:
+            first_lines = [next(f) for _ in range(3)]
+            logger.info("Cookie file header:")
+            for line in first_lines:
+                if line.startswith('#'):  # Only log comment lines
+                    logger.info(f"  {line.strip()}")
             
         # Test video ID (a popular video that's unlikely to be taken down)
         test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -49,19 +70,21 @@ def validate_youtube_cookies():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'cookiefile': os.path.abspath('cookies.txt')
+            'cookiefile': cookie_path
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            logger.info("Attempting to extract video info with cookies...")
             info = ydl.extract_info(test_url, download=False)
             if info and 'title' in info:
-                logger.info("YouTube cookies validated successfully!")
+                logger.info(f"Cookie validation successful! Video title: {info['title']}")
                 return True
             else:
                 logger.error("Cookie validation failed: couldn't extract video info")
                 return False
     except Exception as e:
         logger.error(f"Cookie validation failed with error: {str(e)}")
+        logger.exception("Full traceback:")
         return False
 
 @app.after_request

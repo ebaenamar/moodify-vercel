@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code and cookies
 COPY . .
 
+# Verify cookie file exists and has correct permissions
+RUN ls -l cookies.txt || (echo "cookies.txt not found!" && exit 1)
+
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/temp/output && \
     mkdir -p /app/output && \
