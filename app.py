@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 import yt_dlp
 import os
@@ -25,14 +25,27 @@ CORS(app, resources={
             "https://moodi-fy.vercel.app",
             "http://localhost:3000",
             "http://localhost:5000",
-            "http://127.0.0.1:5000"
+            "http://127.0.0.1:5000",
+            "https://moodi-fy-ebaenamar.vercel.app",  # Add Vercel preview deployments
+            "https://*.vercel.app"  # Allow all Vercel subdomains
         ],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Device-Info"],
-        "expose_headers": ["Content-Disposition"],
-        "supports_credentials": True
+        "allow_headers": ["Content-Type", "Authorization", "X-Device-Info", "Range"],
+        "expose_headers": ["Content-Disposition", "Content-Range", "Content-Length", "Accept-Ranges"],
+        "supports_credentials": True,
+        "max_age": 600
     }
 })
+
+# Add CORS headers to all responses
+@app.after_request
+def after_request(response):
+    # Allow requests from any origin for mobile support
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Device-Info,Range')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    response.headers.add('Access-Control-Expose-Headers', 'Content-Disposition,Content-Range,Content-Length,Accept-Ranges')
+    return response
 
 def validate_youtube_cookies():
     """
@@ -84,29 +97,6 @@ def validate_youtube_cookies():
         logger.error(f"Cookie validation failed with error: {str(e)}")
         logger.exception("Full traceback:")
         return False
-
-@app.after_request
-def after_request(response):
-    origin = request.headers.get('Origin')
-    if origin and (origin.endswith('.vercel.app') or origin.startswith('http://localhost')):
-        response.headers.add('Access-Control-Allow-Origin', origin)
-    else:
-        response.headers.add('Access-Control-Allow-Origin', 'https://moodi-fy.vercel.app')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    return response
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Create temporary directories for processing
-TEMP_DIR = os.environ.get('TEMP_DIR', tempfile.mkdtemp())
-OUTPUT_DIR = os.path.join(TEMP_DIR, 'output')
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-logger.info(f"Temporary directory created at: {TEMP_DIR}")
-logger.info(f"Output directory created at: {OUTPUT_DIR}")
 
 def get_custom_headers():
     """Get custom headers for YouTube requests."""
@@ -596,6 +586,44 @@ def serve_audio(filename):
             return jsonify({'error': 'Audio file not found'}), 404
             
         app.logger.info(f"Serving audio file: {file_path}")
+        
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
+        # Handle range requests for mobile browsers
+        range_header = request.headers.get('Range', None)
+        if range_header:
+            app.logger.info(f"Range request received: {range_header}")
+            byte1, byte2 = 0, None
+            match = re.search('bytes=(\d+)-(\d*)', range_header)
+            if match:
+                groups = match.groups()
+                if groups[0]:
+                    byte1 = int(groups[0])
+                if groups[1]:
+                    byte2 = int(groups[1])
+
+            if byte2 is None:
+                byte2 = file_size - 1
+            length = byte2 - byte1 + 1
+
+            with open(file_path, 'rb') as f:
+                f.seek(byte1)
+                data = f.read(length)
+
+            response = Response(
+                data,
+                206,
+                mimetype='audio/mpeg',
+                direct_passthrough=True,
+            )
+            response.headers.add('Content-Range', f'bytes {byte1}-{byte2}/{file_size}')
+            response.headers.add('Accept-Ranges', 'bytes')
+            response.headers.add('Content-Length', str(length))
+            app.logger.info(f"Serving partial content: bytes {byte1}-{byte2}/{file_size}")
+            return response
+            
+        # If no range request, serve entire file
         return send_file(
             file_path,
             mimetype='audio/mpeg',
@@ -604,7 +632,20 @@ def serve_audio(filename):
         )
     except Exception as e:
         app.logger.error(f"Error serving audio file: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': 'Failed to serve audio file'}), 500
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create temporary directories for processing
+TEMP_DIR = os.environ.get('TEMP_DIR', tempfile.mkdtemp())
+OUTPUT_DIR = os.path.join(TEMP_DIR, 'output')
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+logger.info(f"Temporary directory created at: {TEMP_DIR}")
+logger.info(f"Output directory created at: {OUTPUT_DIR}")
 
 if __name__ == '__main__':
     # Validate cookies on startup
