@@ -63,8 +63,8 @@ def validate_youtube_cookies():
                 if line.startswith('#'):  # Only log comment lines
                     logger.info(f"  {line.strip()}")
             
-        # Test video ID (a popular video that's unlikely to be taken down)
-        test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        # Test video - Sabrina Carpenter - Espresso
+        test_url = "https://www.youtube.com/watch?v=eVli-tstM5E"
         
         ydl_opts = {
             'quiet': True,

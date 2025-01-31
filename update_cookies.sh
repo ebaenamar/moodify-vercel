@@ -29,8 +29,8 @@ if [ -f "cookies.txt" ]; then
     cp cookies.txt cookies.txt.backup
 fi
 
-# Test video ID (a very popular video that's unlikely to be taken down)
-TEST_VIDEO="dQw4w9WgXcQ"
+# Test video - Sabrina Carpenter - Espresso
+TEST_VIDEO="eVli-tstM5E"
 
 # Extract fresh cookies
 log "Extracting fresh cookies from Chrome..." $YELLOW
@@ -71,7 +71,7 @@ fi
 if ! git commit -m "chore: update YouTube cookies $(date '+%Y-%m-%d')
 
 - Extract fresh cookies from Chrome browser
-- Test cookies with a sample video
+- Test cookies with Sabrina Carpenter - Espresso
 - Update cookies.txt for Docker deployment"; then
     log "Failed to commit changes" $RED
     exit 1
