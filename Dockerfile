@@ -16,18 +16,23 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd -m -d /home/app app && \
     chown -R app:app /home/app
 
-# Copy application code and cookies
-COPY . .
-
-# Verify cookie file exists and has correct permissions
-RUN ls -l cookies.txt || (echo "cookies.txt not found!" && exit 1)
-
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/temp/output && \
     mkdir -p /app/output && \
     chown -R app:app /app && \
-    chmod -R 755 /app && \
-    chmod 644 /app/cookies.txt
+    chmod -R 755 /app
+
+# Copy application code
+COPY . .
+
+# Verify cookie file exists and has correct permissions
+RUN ls -l cookies.txt || (echo "cookies.txt not found!" && exit 1) && \
+    chown app:app cookies.txt && \
+    chmod 644 cookies.txt && \
+    # Print cookie file info for debugging
+    echo "Cookie file details:" && \
+    ls -l cookies.txt && \
+    head -n 3 cookies.txt
 
 # Set environment variables
 ENV TEMP_DIR=/app/temp
@@ -39,8 +44,13 @@ ENV PORT=10000
 # Update yt-dlp to latest version
 RUN yt-dlp -U
 
-# Switch to app user for validation
+# Switch to app user for validation and running
 USER app
+
+# Test cookie file access
+RUN echo "Testing cookie file access..." && \
+    cat cookies.txt > /dev/null && \
+    echo "Cookie file is readable!"
 
 # Validate cookies during build
 RUN chmod +x validate_cookies.py && \
