@@ -584,6 +584,28 @@ def transform_audio():
         logger.error(traceback.format_exc())
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+@app.route('/api/audio/<filename>')
+def serve_audio(filename):
+    """Serve processed audio files."""
+    try:
+        output_dir = os.environ.get('OUTPUT_DIR', '/app/output')
+        file_path = os.path.join(output_dir, filename)
+        
+        if not os.path.exists(file_path):
+            app.logger.error(f"Audio file not found: {file_path}")
+            return jsonify({'error': 'Audio file not found'}), 404
+            
+        app.logger.info(f"Serving audio file: {file_path}")
+        return send_file(
+            file_path,
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        app.logger.error(f"Error serving audio file: {str(e)}")
+        return jsonify({'error': 'Failed to serve audio file'}), 500
+
 if __name__ == '__main__':
     # Validate cookies on startup
     if not validate_youtube_cookies():

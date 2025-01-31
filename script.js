@@ -170,10 +170,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorData.error || 'Failed to process YouTube link');
             }
 
-            // Get the audio blob directly from the response
-            const blob = await response.blob();
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to process audio');
+            }
+
+            // Fetch the processed audio file
+            const audioResponse = await fetch(`${API_URL}/api/audio/${data.filename}`);
+            if (!audioResponse.ok) {
+                throw new Error('Failed to fetch processed audio');
+            }
+
+            // Get the audio blob
+            const blob = await audioResponse.blob();
             if (blob.size === 0) {
                 throw new Error('Received empty audio file');
+            }
+
+            // Check if it's actually an audio file
+            if (!blob.type.startsWith('audio/')) {
+                throw new Error('Invalid audio file received');
             }
 
             // Revoke the old URL if it exists
