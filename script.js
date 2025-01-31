@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
             buttonContainer.classList.add('hidden');
             audioClip.classList.add('hidden');
 
+            console.log(`Making request to ${API_URL}/api/download with effect: ${vibeType}`);
             const response = await fetch(`${API_URL}/api/download`, {
                 method: 'POST',
                 headers: {
@@ -165,24 +166,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
 
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries([...response.headers]));
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(e => ({ error: 'Failed to parse error response' }));
+                console.error('Error response:', errorData);
                 throw new Error(errorData.error || 'Failed to process YouTube link');
             }
 
             const data = await response.json();
+            console.log('Response data:', data);
+
             if (!data.success) {
                 throw new Error(data.error || 'Failed to process audio');
             }
 
-            // Fetch the processed audio file
+            console.log(`Fetching audio from ${API_URL}/api/audio/${data.filename}`);
             const audioResponse = await fetch(`${API_URL}/api/audio/${data.filename}`);
+            
+            console.log('Audio response status:', audioResponse.status);
+            console.log('Audio response headers:', Object.fromEntries([...audioResponse.headers]));
+
             if (!audioResponse.ok) {
+                const audioError = await audioResponse.text().catch(() => 'Failed to fetch audio');
+                console.error('Audio error:', audioError);
                 throw new Error('Failed to fetch processed audio');
             }
 
             // Get the audio blob
             const blob = await audioResponse.blob();
+            console.log('Audio blob size:', blob.size, 'type:', blob.type);
+
             if (blob.size === 0) {
                 throw new Error('Received empty audio file');
             }
@@ -208,10 +223,11 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await audioClip.play();
             } catch (playError) {
-                console.log('Auto-play failed:', playError);
+                console.error('Auto-play failed:', playError);
             }
             
         } catch (error) {
+            console.error('Processing error:', error);
             showError(error.message || 'An error occurred while processing your request');
         } finally {
             loadingDiv.classList.add('hidden');

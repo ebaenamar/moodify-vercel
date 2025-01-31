@@ -456,51 +456,81 @@ audio.playing {
 
     .container {
         padding: 1rem;
-        margin: 1rem;
-        max-width: 100%;
+        margin: 0.5rem;
+        max-width: calc(100% - 2rem);
         border-radius: 10px;
+        min-height: calc(100vh - 2rem);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
 
     h1 {
-        font-size: 2.2rem;
+        font-size: 2rem;
+        margin-bottom: 1.5rem;
+        line-height: 1.2;
+    }
+
+    .input-section {
+        margin: 1rem 0;
     }
 
     input[type="text"] {
         font-size: 16px; /* Prevents iOS zoom on focus */
         padding: 0.8rem;
+        width: calc(100% - 2rem);
+        max-width: none;
     }
 
     .emoji {
-        font-size: 1.5rem;
-        padding: 0.4rem;
+        font-size: 1.8rem; /* Keep emojis large enough to tap */
+        padding: 0.6rem;
+        margin: 0.2rem;
     }
 
     .emoji-container {
-        gap: 0.5rem;
+        gap: 0.7rem;
+        padding: 0.5rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin: 1rem 0;
     }
 
     .button-container {
-        gap: 0.5rem;
+        gap: 0.8rem;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 1rem 0;
     }
 
     .neon-button {
-        padding: 0.6rem 1.2rem;
-        font-size: 0.9rem;
-        min-width: 100px; /* Better touch targets */
+        padding: 0.8rem 1.5rem;
+        font-size: 1rem;
+        min-width: 120px; /* Better touch targets */
+        margin: 0.3rem;
     }
 
     audio {
-        width: 90%;
-        margin: 1.5rem auto;
+        width: 100%;
+        margin: 1rem auto;
+        height: 40px; /* Taller for better touch control */
     }
 
-    /* Improve touch targets */
+    /* Improve touch targets for audio controls */
     audio::-webkit-media-controls-panel {
         padding: 0 10px;
+        height: 40px;
     }
 
+    audio::-webkit-media-controls-play-button {
+        height: 30px;
+        width: 30px;
+    }
+
+    /* Hide tooltips on mobile for cleaner look */
     .tooltip {
-        display: none; /* Hide tooltips on mobile */
+        display: none;
     }
 
     /* Add safe areas for notched phones */
@@ -509,7 +539,23 @@ audio.playing {
             padding-left: max(1rem, env(safe-area-inset-left));
             padding-right: max(1rem, env(safe-area-inset-right));
             padding-bottom: max(1rem, env(safe-area-inset-bottom));
+            padding-top: max(1rem, env(safe-area-inset-top));
         }
+    }
+
+    /* Improve loading animation visibility */
+    .loading {
+        font-size: 1.5rem;
+        margin: 1rem auto;
+    }
+
+    /* Better error message positioning */
+    .error-message,
+    .info-message {
+        font-size: 0.9rem;
+        padding: 0.8rem;
+        margin: 0.5rem auto;
+        max-width: calc(100% - 2rem);
     }
 }
 
@@ -517,10 +563,48 @@ audio.playing {
 @media (min-width: 768px) and (max-width: 1024px) {
     .container {
         max-width: 90%;
-        margin: 2rem;
+        margin: 2rem auto;
+        padding: 2rem;
     }
 
     .emoji {
-        font-size: 1.6rem;
+        font-size: 2rem;
+        padding: 0.8rem;
+    }
+
+    .emoji-container {
+        gap: 1rem;
+    }
+
+    input[type="text"] {
+        font-size: 1.1rem;
+        padding: 1rem;
+    }
+
+    .neon-button {
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+    }
+}
+
+/* Handle landscape orientation */
+@media (max-width: 768px) and (orientation: landscape) {
+    .container {
+        padding: 1rem;
+        min-height: auto;
+    }
+
+    .emoji-container {
+        gap: 0.5rem;
+    }
+
+    .emoji {
+        font-size: 1.5rem;
+        padding: 0.4rem;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+        margin-bottom: 1rem;
     }
 }

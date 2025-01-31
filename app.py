@@ -47,6 +47,36 @@ def after_request(response):
     response.headers.add('Access-Control-Expose-Headers', 'Content-Disposition,Content-Range,Content-Length,Accept-Ranges')
     return response
 
+@app.before_request
+def log_request_info():
+    """Log details about every request."""
+    app.logger.info('=' * 50)
+    app.logger.info(f'Request Method: {request.method}')
+    app.logger.info(f'Request URL: {request.url}')
+    app.logger.info(f'Request Headers: {dict(request.headers)}')
+    app.logger.info(f'Request Args: {dict(request.args)}')
+    if request.is_json:
+        app.logger.info(f'Request JSON: {request.get_json()}')
+    app.logger.info('=' * 50)
+
+@app.after_request
+def log_response_info(response):
+    """Log details about every response."""
+    app.logger.info('-' * 50)
+    app.logger.info(f'Response Status: {response.status}')
+    app.logger.info(f'Response Headers: {dict(response.headers)}')
+    app.logger.info('-' * 50)
+    return response
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Log any exceptions that occur."""
+    app.logger.error('!' * 50)
+    app.logger.error(f'Exception occurred: {str(e)}')
+    app.logger.error(traceback.format_exc())
+    app.logger.error('!' * 50)
+    return jsonify({'error': str(e)}), 500
+
 def validate_youtube_cookies():
     """
     Validate that the cookies.txt file exists and is working properly.
@@ -384,6 +414,12 @@ def process_youtube_audio(url, effect_type='slow_reverb'):
             os.remove(download_path + '.mp3')
         raise ValueError("An unexpected error occurred while processing the video")
 
+def is_mobile_request():
+    """Check if the request is coming from a mobile device."""
+    user_agent = request.headers.get('User-Agent', '').lower()
+    mobile_keywords = ['mobile', 'android', 'iphone', 'ipad', 'ipod']
+    return any(keyword in user_agent for keyword in mobile_keywords)
+
 @app.route('/')
 def root():
     """Root endpoint to verify the server is running"""
@@ -421,8 +457,13 @@ def internal_error(error):
 
 @app.route('/api/download', methods=['POST'])
 def process_youtube():
+    """Process a YouTube video URL."""
     try:
-        app.logger.info("Starting YouTube processing request")
+        app.logger.info(f"Processing request from {'mobile' if is_mobile_request() else 'desktop'} device")
+        if not request.is_json:
+            app.logger.error("Request must be JSON")
+            return jsonify({'error': 'Request must be JSON'}), 400
+        
         request_data = request.get_json()
         app.logger.info(f"Request data: {request_data}")
 
