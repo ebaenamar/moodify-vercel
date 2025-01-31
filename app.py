@@ -13,6 +13,8 @@ import requests
 import moviepy.editor as mp
 import time
 import datetime
+import glob
+import shutil
 
 app = Flask(__name__)
 
@@ -428,84 +430,120 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/download', methods=['POST'])
-def download():
+def process_youtube():
     try:
-        data = request.get_json()
-        if not data or 'url' not in data:
-            return jsonify({'error': 'No URL provided'}), 400
+        app.logger.info("Starting YouTube processing request")
+        request_data = request.get_json()
+        app.logger.info(f"Request data: {request_data}")
 
-        url = data['url']
-        effect_type = data.get('effect_type', 'slow_reverb')
-        cookies = data.get('cookies')  # Get cookies from request if available
+        if not request_data or 'url' not in request_data:
+            app.logger.error("Invalid request: missing URL")
+            return jsonify({'error': 'Missing URL parameter'}), 400
 
-        # Validate YouTube URL
-        if not extract_video_id(url):
-            return jsonify({'error': 'Invalid YouTube URL'}), 400
+        url = request_data['url']
+        app.logger.info(f"Processing URL: {url}")
 
-        # Try different cookie methods
-        cookies_path = None
+        # Verify cookies file exists and is readable
+        cookie_file = 'cookies.txt'
+        if not os.path.exists(cookie_file):
+            app.logger.error("Cookie file not found")
+            return jsonify({'error': 'Cookie file not found'}), 500
         
-        # 1. Try cookies from request
-        if cookies:
-            logger.info("Received cookies from browser, writing to cookies.txt")
-            cookies_path = os.path.join(TEMP_DIR, 'cookies.txt')
-            with open(cookies_path, 'w') as f:
-                f.write("# Netscape HTTP Cookie File\n")
-                f.write("# https://curl.haxx.se/rfc/cookie_spec.html\n")
-                f.write("# This is a generated file!  Do not edit.\n\n")
-                
-                # Parse cookies string from browser
-                for cookie in cookies.split(';'):
-                    if '=' in cookie:
-                        name, value = cookie.strip().split('=', 1)
-                        # Set a default expiration of 1 year from now
-                        expires = str(int(time.time()) + 31536000)
-                        f.write(f".youtube.com\tTRUE\t/\tTRUE\t{expires}\t{name}\t{value}\n")
-            logger.info(f"Successfully wrote browser cookies to file")
+        app.logger.info(f"Cookie file stats: size={os.path.getsize(cookie_file)}, last_modified={os.path.getmtime(cookie_file)}")
         
-        # 2. If no cookies in request or writing failed, try using cookies.txt
-        if not cookies_path and os.path.exists('cookies.txt'):
-            logger.info("Using existing cookies.txt file")
-            cookies_path = os.path.abspath('cookies.txt')
-        
-        # 3. If still no cookies, try getting them from Chrome
-        if not cookies_path:
-            logger.info("Getting fresh cookies from Chrome")
-            try:
-                subprocess.run([
-                    'yt-dlp',
-                    '--cookies-from-browser', 'chrome',
-                    '--cookies', 'temp_cookies.txt',
-                    '--quiet',
-                    url
-                ], check=True)
-                if os.path.exists('temp_cookies.txt'):
-                    cookies_path = os.path.abspath('temp_cookies.txt')
-                    logger.info("Successfully got cookies from Chrome")
-            except Exception as e:
-                logger.error(f"Error getting Chrome cookies: {str(e)}")
-
-        # Process the audio
         try:
-            output_path, filename = process_youtube_audio(url, effect_type)
-            
-            # Clean up temporary cookies file
-            if cookies_path and os.path.basename(cookies_path) == 'temp_cookies.txt':
-                try:
-                    os.remove(cookies_path)
-                except:
-                    pass
-                    
+            with open(cookie_file, 'r') as f:
+                cookie_content = f.read()
+                app.logger.info(f"Cookie file is readable, length: {len(cookie_content)}")
         except Exception as e:
-            logger.error(f"Error downloading audio: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            app.logger.error(f"Error reading cookie file: {str(e)}")
+            return jsonify({'error': 'Could not read cookie file'}), 500
 
-        # Return the file
-        return send_file(output_path, as_attachment=True, download_name=f"{filename}.mp3")
+        # Create temp directory if it doesn't exist
+        temp_dir = os.environ.get('TEMP_DIR', '/app/temp')
+        output_dir = os.environ.get('OUTPUT_DIR', '/app/output')
+        
+        os.makedirs(temp_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        app.logger.info(f"Using directories - temp: {temp_dir}, output: {output_dir}")
+        app.logger.info(f"Directory permissions - temp: {oct(os.stat(temp_dir).st_mode)}, output: {oct(os.stat(output_dir).st_mode)}")
+
+        # Download audio using yt-dlp
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'cookiesfrombrowser': None,  # Disable browser cookies
+            'cookiefile': cookie_file,
+            'extract_audio': True,
+            'outtmpl': f'{temp_dir}/%(title)s.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'verbose': True,  # Enable verbose output for debugging
+            'quiet': False,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                app.logger.info("Starting video info extraction")
+                video_info = ydl.extract_info(url, download=False)
+                app.logger.info(f"Video info extracted successfully: {video_info.get('title', 'No title')}")
+                
+                app.logger.info("Starting video download")
+                ydl.download([url])
+                app.logger.info("Video download completed")
+        except Exception as e:
+            app.logger.error(f"Error in yt-dlp operation: {str(e)}")
+            return jsonify({'error': f'YouTube download failed: {str(e)}'}), 500
+
+        # Find the downloaded file
+        downloaded_files = glob.glob(f"{temp_dir}/*.mp3")
+        if not downloaded_files:
+            app.logger.error("No MP3 file found after download")
+            return jsonify({'error': 'No audio file found after download'}), 500
+
+        input_file = downloaded_files[0]
+        app.logger.info(f"Found downloaded file: {input_file}")
+
+        # Generate output filename
+        output_filename = f"{os.path.splitext(os.path.basename(input_file))[0]}_processed.mp3"
+        output_file = os.path.join(output_dir, output_filename)
+        app.logger.info(f"Output file will be: {output_file}")
+
+        # Apply audio effect (if any)
+        effect = request_data.get('effect', None)
+        if effect:
+            app.logger.info(f"Applying effect: {effect}")
+            try:
+                apply_audio_effect(input_file, output_file, effect)
+                app.logger.info("Effect applied successfully")
+            except Exception as e:
+                app.logger.error(f"Error applying effect: {str(e)}")
+                return jsonify({'error': f'Effect application failed: {str(e)}'}), 500
+        else:
+            # If no effect, just copy the file
+            shutil.copy2(input_file, output_file)
+            app.logger.info("No effect requested, file copied to output")
+
+        # Clean up temp file
+        try:
+            os.remove(input_file)
+            app.logger.info("Temporary file cleaned up")
+        except Exception as e:
+            app.logger.warning(f"Failed to clean up temp file: {str(e)}")
+
+        app.logger.info("Processing completed successfully")
+        return jsonify({
+            'success': True,
+            'message': 'Audio processed successfully',
+            'filename': output_filename
+        })
+
     except Exception as e:
-        logger.error(f"Error in download endpoint: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Unexpected error in process_youtube: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/api/transform', methods=['POST'])
 def transform_audio():
