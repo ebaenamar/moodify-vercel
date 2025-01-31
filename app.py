@@ -311,6 +311,15 @@ def apply_audio_effect(input_path, output_path, effect_type='slow_reverb'):
         logger.error(traceback.format_exc())
         return False
 
+def sanitize_filename(filename):
+    """Sanitize filename by removing invalid characters."""
+    # Remove invalid filename characters
+    filename = re.sub(r'[<>:"/\\|?*]', '', filename)
+    # Replace spaces with underscores
+    filename = filename.replace(' ', '_')
+    # Limit length
+    return filename[:100]
+
 def process_youtube_audio(url, effect_type='slow_reverb'):
     """Download and process YouTube audio."""
     download_path = None
@@ -325,10 +334,18 @@ def process_youtube_audio(url, effect_type='slow_reverb'):
         clean_url = f"https://www.youtube.com/watch?v={video_id}"
         logger.info(f"Clean YouTube URL: {clean_url}")
         
-        # Generate unique filename
-        temp_filename = f"{uuid.uuid4()}"
+        # Get video info to extract title
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            video_title = info.get('title', video_id)
+        
+        # Generate filename using title and effect
+        safe_title = sanitize_filename(video_title)
+        temp_filename = f"{safe_title}"
+        final_filename = f"{safe_title}_{effect_type}"
+        
         download_path = os.path.join(TEMP_DIR, temp_filename)
-        output_path = os.path.join(OUTPUT_DIR, f"{temp_filename}.mp3")
+        output_path = os.path.join(OUTPUT_DIR, f"{final_filename}.mp3")
 
         # Download the audio
         downloaded_file = download_audio(clean_url, download_path)
@@ -344,7 +361,7 @@ def process_youtube_audio(url, effect_type='slow_reverb'):
         os.remove(downloaded_file)
         logger.info("Cleaned up temporary files")
 
-        return output_path
+        return output_path, final_filename
 
     except ValueError as e:
         # Re-raise user-friendly errors
@@ -399,36 +416,62 @@ def download():
             return jsonify({'error': 'No URL provided'}), 400
 
         url = data['url']
+        effect_type = data.get('effect_type', 'slow_reverb')
         cookies = data.get('cookies')  # Get cookies from request if available
 
         # Validate YouTube URL
         if not extract_video_id(url):
             return jsonify({'error': 'Invalid YouTube URL'}), 400
 
-        # Create a unique filename
-        video_id = extract_video_id(url)
-        output_filename = f"{video_id}_{int(time.time())}.mp3"
-        output_path = os.path.join(OUTPUT_DIR, output_filename)
-
-        # If we received cookies from the browser, use them
+        # Try different cookie methods
+        cookies_path = None
+        
+        # 1. Try cookies from request
         if cookies:
             logger.info("Received cookies from browser, writing to cookies.txt")
             cookies_path = write_cookies_from_browser(cookies)
             if cookies_path:
                 logger.info("Successfully wrote browser cookies to file")
-        else:
-            cookies_path = None
+        
+        # 2. If no cookies in request or writing failed, try using cookies.txt
+        if not cookies_path and os.path.exists('cookies.txt'):
+            logger.info("Using existing cookies.txt file")
+            cookies_path = os.path.abspath('cookies.txt')
+        
+        # 3. If still no cookies, try getting them from Chrome
+        if not cookies_path:
+            logger.info("Getting fresh cookies from Chrome")
+            try:
+                subprocess.run([
+                    'yt-dlp',
+                    '--cookies-from-browser', 'chrome',
+                    '--cookies', 'temp_cookies.txt',
+                    '--quiet',
+                    url
+                ], check=True)
+                if os.path.exists('temp_cookies.txt'):
+                    cookies_path = os.path.abspath('temp_cookies.txt')
+                    logger.info("Successfully got cookies from Chrome")
+            except Exception as e:
+                logger.error(f"Error getting Chrome cookies: {str(e)}")
 
-        # Download the audio
+        # Process the audio
         try:
-            output_path = download_audio(url, output_path, cookies_path)
+            output_path, filename = process_youtube_audio(url, effect_type)
+            
+            # Clean up temporary cookies file
+            if cookies_path and os.path.basename(cookies_path) == 'temp_cookies.txt':
+                try:
+                    os.remove(cookies_path)
+                except:
+                    pass
+                    
         except Exception as e:
             logger.error(f"Error downloading audio: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
         # Return the file
-        return send_file(output_path, as_attachment=True, download_name=output_filename)
-
+        return send_file(output_path, as_attachment=True, download_name=f"{filename}.mp3")
     except Exception as e:
         logger.error(f"Error in download endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -450,7 +493,7 @@ def transform_audio():
         logger.info(f"Processing URL: {url} with effect: {effect_type}")
         
         # Process the audio
-        output_path = process_youtube_audio(url, effect_type)
+        output_path, filename = process_youtube_audio(url, effect_type)
         
         if not os.path.exists(output_path):
             logger.error("Output file not found after processing")
@@ -462,7 +505,7 @@ def transform_audio():
             output_path,
             mimetype='audio/mpeg',
             as_attachment=True,
-            download_name=f"moodify_{secure_filename(effect_type)}.mp3"
+            download_name=f"{filename}.mp3"
         )
 
     except ValueError as e:
