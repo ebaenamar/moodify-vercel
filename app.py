@@ -513,7 +513,7 @@ def process_youtube():
         app.logger.info(f"Output file will be: {output_file}")
 
         # Apply audio effect (if any)
-        effect = request_data.get('effect', None)
+        effect = request_data.get('effect_type', None)
         if effect:
             app.logger.info(f"Applying effect: {effect}")
             try:
