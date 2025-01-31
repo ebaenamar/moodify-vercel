@@ -128,12 +128,37 @@ def get_ydl_opts(cookies_path=None):
         'no_warnings': True,
         'extract_flat': True,
         'no_check_certificate': True,
-        'http_headers': get_custom_headers()
+        'http_headers': get_custom_headers(),
+        'socket_timeout': 30,
+        'retries': 3
     }
     
     if cookies_path and os.path.exists(cookies_path):
-        logger.info(f"Using cookies from: {cookies_path}")
-        opts['cookiefile'] = os.path.abspath(cookies_path)
+        cookie_path = os.path.abspath(cookies_path)
+        logger.info(f"Using cookies from: {cookie_path}")
+        
+        # Log cookie file details
+        try:
+            cookie_stats = os.stat(cookie_path)
+            logger.info(f"Cookie file size: {cookie_stats.st_size} bytes")
+            logger.info(f"Cookie permissions: {oct(cookie_stats.st_mode)[-3:]}")
+            logger.info(f"Cookie last modified: {datetime.datetime.fromtimestamp(cookie_stats.st_mtime)}")
+            
+            # Check if file is readable
+            if not os.access(cookie_path, os.R_OK):
+                logger.error(f"Cookie file is not readable! Permissions: {oct(cookie_stats.st_mode)[-3:]}")
+                return opts
+            
+            # Verify cookie file format
+            with open(cookie_path, 'r') as f:
+                first_line = f.readline().strip()
+                if not first_line.startswith('# Netscape HTTP Cookie File'):
+                    logger.error("Cookie file appears to be invalid - wrong header")
+                    return opts
+                
+            opts['cookiefile'] = cookie_path
+        except Exception as e:
+            logger.error(f"Error checking cookie file: {str(e)}")
     
     return opts
 
@@ -180,15 +205,18 @@ def get_fresh_cookies_docker(url):
 def download_audio(url, output_path, cookies_path=None):
     """Download audio from a YouTube video."""
     try:
-        # Validate cookies before attempting download
-        if not validate_youtube_cookies():
-            logger.error("Cookie validation failed before download attempt")
-            raise Exception("YouTube cookies are invalid or expired. Please refresh cookies and redeploy.")
-
+        logger.info(f"Starting download for URL: {url}")
+        logger.info(f"Output path: {output_path}")
+        
+        # Get options with cookie validation
         ydl_opts = get_ydl_opts('cookies.txt')
         ydl_opts['extract_flat'] = False
         ydl_opts['outtmpl'] = output_path
-
+        
+        # Log all options (excluding sensitive data)
+        safe_opts = {k:v for k,v in ydl_opts.items() if k not in ['cookiefile']}
+        logger.info(f"Download options: {safe_opts}")
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             logger.info(f"Downloading audio from: {url}")
             ydl.download([url])
@@ -196,10 +224,14 @@ def download_audio(url, output_path, cookies_path=None):
         if not os.path.exists(output_path):
             raise Exception(f"Download completed but file not found at {output_path}")
             
+        # Log success details
+        file_size = os.path.getsize(output_path)
+        logger.info(f"Download successful! File size: {file_size} bytes")
         return True
 
     except Exception as e:
         logger.error(f"Error downloading audio: {str(e)}")
+        logger.exception("Full traceback:")
         raise
 
 def apply_audio_effect(input_path, output_path, effect_type='slow_reverb'):
