@@ -66,12 +66,8 @@ def validate_youtube_cookies():
         # Test video - Sabrina Carpenter - Espresso
         test_url = "https://www.youtube.com/watch?v=eVli-tstM5E"
         
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': True,
-            'cookiefile': cookie_path
-        }
+        ydl_opts = get_ydl_opts('cookies.txt')
+        ydl_opts['extract_flat'] = True  # Only fetch metadata
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             logger.info("Attempting to extract video info with cookies...")
@@ -118,6 +114,28 @@ def get_custom_headers():
         'Accept-Language': 'en-US,en;q=0.5',
         'Connection': 'keep-alive',
     }
+
+def get_ydl_opts(cookies_path=None):
+    """Get consistent yt-dlp options across all functions."""
+    opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,
+        'no_check_certificate': True,
+        'http_headers': get_custom_headers()
+    }
+    
+    if cookies_path and os.path.exists(cookies_path):
+        logger.info(f"Using cookies from: {cookies_path}")
+        opts['cookiefile'] = os.path.abspath(cookies_path)
+    
+    return opts
 
 def extract_video_id(url):
     """Extract video ID from various YouTube URL formats."""
@@ -167,22 +185,9 @@ def download_audio(url, output_path, cookies_path=None):
             logger.error("Cookie validation failed before download attempt")
             raise Exception("YouTube cookies are invalid or expired. Please refresh cookies and redeploy.")
 
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'outtmpl': output_path,
-            'quiet': True,
-            'no_warnings': True
-        }
-
-        if cookies_path and os.path.exists('cookies.txt'):
-            logger.info("Using existing cookies.txt file")
-            cookies_path = os.path.abspath('cookies.txt')
-            ydl_opts['cookiefile'] = cookies_path
+        ydl_opts = get_ydl_opts('cookies.txt')
+        ydl_opts['extract_flat'] = False
+        ydl_opts['outtmpl'] = output_path
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             logger.info(f"Downloading audio from: {url}")

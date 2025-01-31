@@ -2,6 +2,12 @@
 import yt_dlp
 import sys
 import json
+import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_custom_headers():
     """Get custom headers for YouTube requests."""
@@ -9,8 +15,26 @@ def get_custom_headers():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-us,en;q=0.5',
-        'Sec-Fetch-Mode': 'navigate'
+        'Sec-Fetch-Mode': 'navigate',
+        'Connection': 'keep-alive',
     }
+
+def get_ydl_opts(cookies_path=None):
+    """Get consistent yt-dlp options."""
+    opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,
+        'nocheckcertificate': True,
+        'noplaylist': True,
+        'http_headers': get_custom_headers()
+    }
+    
+    if cookies_path and os.path.exists(cookies_path):
+        logger.info(f"Using cookies from: {cookies_path}")
+        opts['cookiefile'] = os.path.abspath(cookies_path)
+    
+    return opts
 
 def test_youtube_url(url, browser='chrome', profile=None, cookies_file=None):
     """Test if we can access a YouTube video with different cookie methods."""
@@ -19,15 +43,8 @@ def test_youtube_url(url, browser='chrome', profile=None, cookies_file=None):
     # Method 1: Direct browser cookies
     if browser:
         print(f"\nTesting with {browser.title()} browser cookies...")
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': True,
-            'nocheckcertificate': True,
-            'noplaylist': True,
-            'cookies_from_browser': (browser, profile) if profile else browser,
-            'http_headers': get_custom_headers()
-        }
+        ydl_opts = get_ydl_opts()
+        ydl_opts['cookies_from_browser'] = (browser, profile) if profile else browser
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -50,15 +67,7 @@ def test_youtube_url(url, browser='chrome', profile=None, cookies_file=None):
     # Method 2: Cookies file
     if cookies_file:
         print(f"\nTesting with cookies file: {cookies_file}...")
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': True,
-            'nocheckcertificate': True,
-            'noplaylist': True,
-            'cookiefile': cookies_file,
-            'http_headers': get_custom_headers()
-        }
+        ydl_opts = get_ydl_opts(cookies_file)
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
