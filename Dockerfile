@@ -1,8 +1,8 @@
 FROM python:3.9-slim
 
-# Install system dependencies including FFmpeg
+# Install system dependencies including FFmpeg and Chrome
 RUN apt-get update && \
-    apt-get install -y ffmpeg git wget python3-dev build-essential && \
+    apt-get install -y ffmpeg git wget python3-dev build-essential chromium chromium-driver && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -14,18 +14,23 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and cookies
 COPY . .
-COPY cookies.txt /app/cookies.txt
 
-# Create and set permissions for temp directory
+# Create necessary directories with proper permissions
 RUN mkdir -p /app/temp/output && \
+    mkdir -p /app/output && \
+    touch /app/cookies.txt && \
     chmod -R 777 /app/temp && \
-    chmod 644 /app/cookies.txt
+    chmod -R 777 /app/output && \
+    chmod 666 /app/cookies.txt
 
 # Set environment variables
 ENV TEMP_DIR=/app/temp
+ENV OUTPUT_DIR=/app/output
 ENV DEBUG=False
 ENV PYTHONUNBUFFERED=1
 ENV PORT=10000
+ENV CHROME_PATH=/usr/bin/chromium
+ENV CHROME_DRIVER_PATH=/usr/bin/chromedriver
 
 # Update yt-dlp to latest version
 RUN yt-dlp -U
