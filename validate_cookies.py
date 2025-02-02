@@ -122,17 +122,19 @@ def validate_youtube_cookies():
         logger.info(f"Running on Render: {in_render}")
         logger.info(f"Skip download test: {SKIP_DOWNLOAD_TEST}")
         
-        # Get IP information
-        ip_info = get_ip_info()
-        logger.info(f"IP Information: {json.dumps(ip_info, indent=2)}")
-        
-        # Test YouTube connectivity
-        if not test_youtube_connectivity():
-            logger.error("Cannot connect to YouTube - possible IP block or network issue")
-            if in_render:
-                logger.error("This might be due to Render's IP being blocked by YouTube")
-                logger.error("Consider using a proxy or VPN for the Render deployment")
-            return False
+        # Skip network checks during Docker build
+        if not (in_docker and SKIP_DOWNLOAD_TEST):
+            # Get IP information
+            ip_info = get_ip_info()
+            logger.info(f"IP Information: {json.dumps(ip_info, indent=2)}")
+            
+            # Test YouTube connectivity
+            if not test_youtube_connectivity():
+                logger.error("Cannot connect to YouTube - possible IP block or network issue")
+                if in_render:
+                    logger.error("This might be due to Render's IP being blocked by YouTube")
+                    logger.error("Consider using a proxy or VPN for the Render deployment")
+                return False
         
         # Log current working directory and cookie file location
         cwd = os.getcwd()
