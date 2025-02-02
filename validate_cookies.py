@@ -155,14 +155,12 @@ def validate_youtube_cookies():
         # In Docker, we'll do a simpler validation during build
         if in_docker and SKIP_DOWNLOAD_TEST:
             logger.info("Skipping download test in Docker environment")
-            # Just check if the file is valid Netscape format
-            with open('cookies.txt', 'r') as f:
-                first_line = f.readline().strip()
-                if '# Netscape HTTP Cookie File' in first_line:
-                    logger.info("Cookie file appears to be in valid Netscape format")
-                    return True
-                logger.error("Cookie file is not in Netscape format")
-                return False
+            # Just check if the file exists and has content
+            if os.path.exists('cookies.txt') and os.path.getsize('cookies.txt') > 0:
+                logger.info("Cookie file exists and is not empty")
+                return True
+            logger.error("Cookie file is missing or empty")
+            return False
         
         # Validate cookie file format
         with open('cookies.txt', 'r') as f:

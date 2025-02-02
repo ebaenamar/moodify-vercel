@@ -54,9 +54,9 @@ RUN echo "Testing cookie file access..." && \
     cat cookies.txt > /dev/null && \
     echo "Cookie file is readable!"
 
-# Validate cookies during build (basic format check only)
+# Only check if cookie file exists and is not empty during build
 ENV SKIP_DOWNLOAD_TEST=true
-RUN python3 validate_cookies.py
+RUN python3 validate_cookies.py || (echo "Cookie file check failed" && exit 1)
 
 # Reset for runtime
 ENV SKIP_DOWNLOAD_TEST=false
