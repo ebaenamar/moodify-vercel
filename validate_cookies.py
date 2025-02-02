@@ -52,10 +52,18 @@ def try_with_proxies(func):
 def get_custom_headers():
     """Get custom headers for requests."""
     return {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-us,en;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"macOS"',
+        'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
         'Connection': 'keep-alive',
     }
 
@@ -177,6 +185,13 @@ def validate_youtube_cookies():
         # Add custom headers in Docker
         if is_running_in_docker():
             ydl_opts['http_headers'] = get_custom_headers()
+            
+        # Debug cookie file content
+        with open('cookies.txt', 'r') as f:
+            cookie_content = f.read()
+            logger.info(f"Cookie file first 500 chars: {cookie_content[:500]}")
+            
+        logger.info(f"yt-dlp options: {json.dumps(ydl_opts, indent=2)}")
         
         # Test video - Sabrina Carpenter - Espresso
         test_url = "https://www.youtube.com/watch?v=eVli-tstM5E"
