@@ -157,7 +157,10 @@ def validate_youtube_cookies():
             logger.info("Skipping download test in Docker environment")
             # Just check if the file exists and has content
             if os.path.exists('cookies.txt') and os.path.getsize('cookies.txt') > 0:
-                logger.info("Cookie file exists and is not empty")
+                # Print first few lines for debugging
+                with open('cookies.txt', 'r') as f:
+                    first_lines = ''.join(f.readlines()[:5])
+                    logger.info(f"First few lines of cookies.txt:\n{first_lines}")
                 return True
             logger.error("Cookie file is missing or empty")
             return False

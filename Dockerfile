@@ -2,7 +2,7 @@ FROM python:3.9-slim
 
 # Install system dependencies including FFmpeg
 RUN apt-get update && \
-    apt-get install -y ffmpeg git wget python3-dev build-essential && \
+    apt-get install -y ffmpeg git wget python3-dev build-essential dos2unix && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -27,6 +27,8 @@ COPY . .
 
 # Set up file permissions while still root
 RUN ls -l cookies.txt || (echo "cookies.txt not found!" && exit 1) && \
+    # Convert line endings and remove any macOS attributes
+    dos2unix cookies.txt && \
     chown app:app cookies.txt && \
     chmod 644 cookies.txt && \
     chmod +x validate_cookies.py && \
