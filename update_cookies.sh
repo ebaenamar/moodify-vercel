@@ -26,19 +26,19 @@ check_command "git"
 # Backup current cookies
 if [ -f "cookies.txt" ]; then
     log "Backing up current cookies..." $YELLOW
-    cp cookies.txt cookies.txt.backup
+    cp cookies.txt cookies.txt.backup.preview
 fi
 
 # Test video - Sabrina Carpenter - Espresso
 TEST_VIDEO="eVli-tstM5E"
 
 # Extract fresh cookies
-log "Extracting fresh cookies from Chrome..." $YELLOW
+log "Extracting fresh cookies for Preview deployment..." $YELLOW
 if ! yt-dlp --cookies-from-browser chrome --cookies cookies.txt "https://www.youtube.com/watch?v=$TEST_VIDEO"; then
     log "Failed to extract cookies from Chrome." $RED
-    if [ -f "cookies.txt.backup" ]; then
+    if [ -f "cookies.txt.backup.preview" ]; then
         log "Restoring backup cookies..." $YELLOW
-        mv cookies.txt.backup cookies.txt
+        mv cookies.txt.backup.preview cookies.txt
     fi
     exit 1
 fi
@@ -47,44 +47,31 @@ fi
 log "Testing new cookies..." $YELLOW
 if ! yt-dlp --cookies cookies.txt -F "https://www.youtube.com/watch?v=$TEST_VIDEO" > /dev/null; then
     log "Cookie test failed. The extracted cookies might not be valid." $RED
-    if [ -f "cookies.txt.backup" ]; then
+    if [ -f "cookies.txt.backup.preview" ]; then
         log "Restoring backup cookies..." $YELLOW
-        mv cookies.txt.backup cookies.txt
+        mv cookies.txt.backup.preview cookies.txt
     fi
     exit 1
 fi
 
-# Check if there are any changes to cookies.txt
-if git diff --quiet cookies.txt; then
-    log "No changes detected in cookies.txt" $YELLOW
-    rm -f cookies.txt.backup
+# Check if we're in a git repository
+log "Checking git remote..." $YELLOW
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    log "Not a git repository. Skipping git operations." $YELLOW
     exit 0
 fi
 
-# Commit and push changes
-log "Committing new cookies..." $YELLOW
-if ! git add cookies.txt; then
-    log "Failed to stage cookies.txt" $RED
+# Commit the changes
+log "Committing new cookies to Preview deployment..." $YELLOW
+git add cookies.txt
+git commit -m "chore: update YouTube cookies for Preview $(date '+%Y-%m-%d')"
+
+# Push to the moodi-fy repository (Preview)
+log "Pushing changes to Preview deployment..." $YELLOW
+if ! git push origin main; then
+    log "Failed to push changes to Preview." $RED
     exit 1
 fi
 
-if ! git commit -m "chore: update YouTube cookies $(date '+%Y-%m-%d')
-
-- Extract fresh cookies from Chrome browser
-- Test cookies with Sabrina Carpenter - Espresso
-- Update cookies.txt for Docker deployment"; then
-    log "Failed to commit changes" $RED
-    exit 1
-fi
-
-log "Pushing changes..." $YELLOW
-if ! git push; then
-    log "Failed to push changes" $RED
-    exit 1
-fi
-
-# Clean up
-rm -f cookies.txt.backup
-
-log "Successfully updated cookies! 🎉"
-log "Don't forget to redeploy your container on Render"
+log "Successfully updated cookies for Preview deployment! 🎉"
+log "Don't forget to redeploy your Preview container on Render"

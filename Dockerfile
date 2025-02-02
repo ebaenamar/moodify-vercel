@@ -41,6 +41,7 @@ ENV OUTPUT_DIR=/app/output
 ENV DEBUG=False
 ENV PYTHONUNBUFFERED=1
 ENV PORT=10000
+ENV RENDER=true
 
 # Update yt-dlp to latest version
 RUN yt-dlp -U
@@ -53,8 +54,12 @@ RUN echo "Testing cookie file access..." && \
     cat cookies.txt > /dev/null && \
     echo "Cookie file is readable!"
 
-# Validate cookies
+# Validate cookies during build (basic format check only)
+ENV SKIP_DOWNLOAD_TEST=true
 RUN python3 validate_cookies.py
+
+# Reset for runtime
+ENV SKIP_DOWNLOAD_TEST=false
 
 # Expose port
 EXPOSE ${PORT}

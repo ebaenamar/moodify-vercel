@@ -49,8 +49,8 @@ Note: The first build might take 5-10 minutes. Render will automatically detect 
 4. Update API URL:
    - Go to your deployed frontend
    - Open the browser console (F12)
-   - Note the domain (e.g., moodify-xyz.vercel.app)
-   - Edit script.js to update the API_URL with your Render backend URL
+   - Your frontend will be deployed to moodi-fy.vercel.app
+   - The backend API is at moodi-fy.onrender.com
 
 ## Step 3: Final Configuration
 
@@ -58,7 +58,7 @@ Note: The first build might take 5-10 minutes. Render will automatically detect 
    - Go to Render dashboard
    - Add environment variable:
      ```
-     ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
+     ALLOWED_ORIGINS=https://moodi-fy.vercel.app
      ```
 
 2. Redeploy the backend:
