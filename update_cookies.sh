@@ -34,13 +34,22 @@ TEST_VIDEO="eVli-tstM5E"
 
 # Extract fresh cookies
 log "Extracting fresh cookies for Preview deployment..." $YELLOW
-if ! yt-dlp --cookies-from-browser chrome --cookies cookies.txt "https://www.youtube.com/watch?v=$TEST_VIDEO"; then
-    log "Failed to extract cookies from Chrome." $RED
-    if [ -f "cookies.txt.backup.preview" ]; then
-        log "Restoring backup cookies..." $YELLOW
-        mv cookies.txt.backup.preview cookies.txt
+
+# Try Firefox first
+log "Trying Firefox..." $YELLOW
+if yt-dlp --cookies-from-browser firefox --cookies cookies.txt "https://www.youtube.com/watch?v=$TEST_VIDEO"; then
+    log "Successfully extracted cookies from Firefox" $GREEN
+else
+    log "Firefox failed, trying Chrome..." $YELLOW
+    if ! yt-dlp --cookies-from-browser chrome --cookies cookies.txt "https://www.youtube.com/watch?v=$TEST_VIDEO"; then
+        log "Failed to extract cookies from Chrome." $RED
+        if [ -f "cookies.txt.backup.preview" ]; then
+            log "Restoring backup cookies..." $YELLOW
+            mv cookies.txt.backup.preview cookies.txt
+        fi
+        exit 1
     fi
-    exit 1
+    log "Successfully extracted cookies from Chrome" $GREEN
 fi
 
 # Test the new cookies

@@ -174,23 +174,43 @@ def validate_youtube_cookies():
                 logger.error("Consider using a proxy or VPN for the Render deployment")
             return False
         
-        # Configure yt-dlp options
+        # Configure yt-dlp options with more debug info
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,  # Only extract video metadata
             'cookiefile': cookie_path,
+            'verbose': True,  # Add verbose output
+            'debug_printtraffic': True,  # Print all sent/received HTTP traffic
         }
         
         # Add custom headers in Docker
         if is_running_in_docker():
-            ydl_opts['http_headers'] = get_custom_headers()
-            
-        # Debug cookie file content
+            headers = get_custom_headers()
+            ydl_opts['http_headers'] = headers
+            logger.info(f"Using custom headers: {json.dumps(headers, indent=2)}")
+        
+        # Validate cookie file format
         with open('cookies.txt', 'r') as f:
             cookie_content = f.read()
             logger.info(f"Cookie file first 500 chars: {cookie_content[:500]}")
             
+            # Check cookie format
+            if not cookie_content.startswith('# Netscape HTTP Cookie File'):
+                logger.error("Cookie file does not appear to be in Netscape format")
+                return False
+                
+            # Check for common YouTube cookies
+            required_cookies = ['youtube.com', 'CONSENT', 'VISITOR_INFO1_LIVE', 'LOGIN_INFO']
+            missing_cookies = [cookie for cookie in required_cookies 
+                             if cookie not in cookie_content]
+            
+            if missing_cookies:
+                logger.error(f"Missing required cookies: {missing_cookies}")
+                return False
+            
+            logger.info("All required YouTube cookies found")
+        
         logger.info(f"yt-dlp options: {json.dumps(ydl_opts, indent=2)}")
         
         # Test video - Sabrina Carpenter - Espresso
