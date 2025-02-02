@@ -35,22 +35,63 @@ TEST_VIDEO="eVli-tstM5E"
 # Extract fresh cookies
 log "Extracting fresh cookies for Preview deployment..." $YELLOW
 
-# Try Firefox first
+# Try both browsers and keep the best cookies
 log "Trying Firefox..." $YELLOW
-if yt-dlp --cookies-from-browser firefox --cookies cookies.txt "https://www.youtube.com/watch?v=$TEST_VIDEO"; then
+if yt-dlp --cookies-from-browser firefox --cookies cookies.txt.firefox "https://www.youtube.com/watch?v=$TEST_VIDEO" 2>/dev/null; then
     log "Successfully extracted cookies from Firefox" $GREEN
+    FIREFOX_SUCCESS=true
 else
-    log "Firefox failed, trying Chrome..." $YELLOW
-    if ! yt-dlp --cookies-from-browser chrome --cookies cookies.txt "https://www.youtube.com/watch?v=$TEST_VIDEO"; then
-        log "Failed to extract cookies from Chrome." $RED
-        if [ -f "cookies.txt.backup.preview" ]; then
-            log "Restoring backup cookies..." $YELLOW
-            mv cookies.txt.backup.preview cookies.txt
-        fi
-        exit 1
-    fi
-    log "Successfully extracted cookies from Chrome" $GREEN
+    log "Firefox extraction failed" $YELLOW
+    FIREFOX_SUCCESS=false
 fi
+
+log "Trying Chrome..." $YELLOW
+if yt-dlp --cookies-from-browser chrome --cookies cookies.txt.chrome "https://www.youtube.com/watch?v=$TEST_VIDEO" 2>/dev/null; then
+    log "Successfully extracted cookies from Chrome" $GREEN
+    CHROME_SUCCESS=true
+else
+    log "Chrome extraction failed" $YELLOW
+    CHROME_SUCCESS=false
+fi
+
+# Test which cookies work better
+if [ "$FIREFOX_SUCCESS" = true ] && [ -f cookies.txt.firefox ]; then
+    log "Testing Firefox cookies..." $YELLOW
+    if yt-dlp --cookies cookies.txt.firefox -F "https://www.youtube.com/watch?v=$TEST_VIDEO" >/dev/null 2>&1; then
+        log "Firefox cookies work well, using them" $GREEN
+        mv cookies.txt.firefox cookies.txt
+        rm -f cookies.txt.chrome 2>/dev/null
+    else
+        log "Firefox cookies failed validation" $YELLOW
+        FIREFOX_SUCCESS=false
+    fi
+fi
+
+if [ "$FIREFOX_SUCCESS" = false ] && [ "$CHROME_SUCCESS" = true ] && [ -f cookies.txt.chrome ]; then
+    log "Testing Chrome cookies..." $YELLOW
+    if yt-dlp --cookies cookies.txt.chrome -F "https://www.youtube.com/watch?v=$TEST_VIDEO" >/dev/null 2>&1; then
+        log "Chrome cookies work well, using them" $GREEN
+        mv cookies.txt.chrome cookies.txt
+        rm -f cookies.txt.firefox 2>/dev/null
+    else
+        log "Chrome cookies failed validation" $RED
+        CHROME_SUCCESS=false
+    fi
+fi
+
+# If both failed, restore backup
+if [ "$FIREFOX_SUCCESS" = false ] && [ "$CHROME_SUCCESS" = false ]; then
+    log "Both browsers failed to provide working cookies" $RED
+    if [ -f "cookies.txt.backup.preview" ]; then
+        log "Restoring backup cookies..." $YELLOW
+        mv cookies.txt.backup.preview cookies.txt
+    fi
+    rm -f cookies.txt.{firefox,chrome} 2>/dev/null
+    exit 1
+fi
+
+# Clean up temporary files
+rm -f cookies.txt.{firefox,chrome} 2>/dev/null
 
 # Test the new cookies
 log "Testing new cookies..." $YELLOW
