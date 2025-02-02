@@ -122,19 +122,28 @@ def validate_youtube_cookies():
         logger.info(f"Running on Render: {in_render}")
         logger.info(f"Skip download test: {SKIP_DOWNLOAD_TEST}")
         
-        # Skip network checks during Docker build
-        if not (in_docker and SKIP_DOWNLOAD_TEST):
-            # Get IP information
-            ip_info = get_ip_info()
-            logger.info(f"IP Information: {json.dumps(ip_info, indent=2)}")
+        # During Docker build, only check file existence
+        if in_docker and SKIP_DOWNLOAD_TEST:
+            if os.path.exists('cookies.txt') and os.path.getsize('cookies.txt') > 0:
+                with open('cookies.txt', 'r') as f:
+                    first_lines = ''.join(f.readlines()[:5])
+                    logger.info(f"First few lines of cookies.txt:\n{first_lines}")
+                return True
+            logger.error("Cookie file is missing or empty")
+            return False
             
-            # Test YouTube connectivity
-            if not test_youtube_connectivity():
-                logger.error("Cannot connect to YouTube - possible IP block or network issue")
-                if in_render:
-                    logger.error("This might be due to Render's IP being blocked by YouTube")
-                    logger.error("Consider using a proxy or VPN for the Render deployment")
-                return False
+        # For runtime, do full validation
+        # Get IP information
+        ip_info = get_ip_info()
+        logger.info(f"IP Information: {json.dumps(ip_info, indent=2)}")
+        
+        # Test YouTube connectivity
+        if not test_youtube_connectivity():
+            logger.error("Cannot connect to YouTube - possible IP block or network issue")
+            if in_render:
+                logger.error("This might be due to Render's IP being blocked by YouTube")
+                logger.error("Consider using a proxy or VPN for the Render deployment")
+            return False
         
         # Log current working directory and cookie file location
         cwd = os.getcwd()
@@ -152,18 +161,7 @@ def validate_youtube_cookies():
         logger.info(f"Cookie file permissions: {oct(cookie_stats.st_mode)[-3:]}")
         logger.info(f"Cookie file owner: {cookie_stats.st_uid}:{cookie_stats.st_gid}")
         
-        # In Docker, we'll do a simpler validation during build
-        if in_docker and SKIP_DOWNLOAD_TEST:
-            logger.info("Skipping download test in Docker environment")
-            # Just check if the file exists and has content
-            if os.path.exists('cookies.txt') and os.path.getsize('cookies.txt') > 0:
-                # Print first few lines for debugging
-                with open('cookies.txt', 'r') as f:
-                    first_lines = ''.join(f.readlines()[:5])
-                    logger.info(f"First few lines of cookies.txt:\n{first_lines}")
-                return True
-            logger.error("Cookie file is missing or empty")
-            return False
+        # Cookie file validation already done above
         
         # Validate cookie file format
         with open('cookies.txt', 'r') as f:
