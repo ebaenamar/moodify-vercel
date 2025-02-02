@@ -122,17 +122,38 @@ def validate_youtube_cookies():
         logger.info(f"Running on Render: {in_render}")
         logger.info(f"Skip download test: {SKIP_DOWNLOAD_TEST}")
         
-        # During Docker build, only check file existence
-        if in_docker and SKIP_DOWNLOAD_TEST:
-            if os.path.exists('cookies.txt') and os.path.getsize('cookies.txt') > 0:
-                with open('cookies.txt', 'r') as f:
-                    first_lines = ''.join(f.readlines()[:5])
-                    logger.info(f"First few lines of cookies.txt:\n{first_lines}")
-                return True
-            logger.error("Cookie file is missing or empty")
+        # Log current working directory and cookie file location
+        cwd = os.getcwd()
+        cookie_path = os.path.abspath('cookies.txt')
+        logger.info(f"Current working directory: {cwd}")
+        logger.info(f"Looking for cookies at: {cookie_path}")
+        
+        # Basic file checks
+        if not os.path.exists('cookies.txt'):
+            logger.error("cookies.txt file not found!")
             return False
             
-        # For runtime, do full validation
+        # Check file permissions and size
+        cookie_stats = os.stat('cookies.txt')
+        logger.info(f"Cookie file size: {cookie_stats.st_size} bytes")
+        logger.info(f"Cookie file permissions: {oct(cookie_stats.st_mode)[-3:]}")
+        logger.info(f"Cookie file owner: {cookie_stats.st_uid}:{cookie_stats.st_gid}")
+        
+        if cookie_stats.st_size == 0:
+            logger.error("Cookie file is empty")
+            return False
+
+        # If SKIP_DOWNLOAD_TEST is True, only check file format
+        if SKIP_DOWNLOAD_TEST:
+            with open('cookies.txt', 'r') as f:
+                first_line = f.readline().strip()
+                if '# Netscape HTTP Cookie File' in first_line:
+                    logger.info("Cookie file appears to be in valid Netscape format")
+                    return True
+                logger.error("Cookie file is not in Netscape format")
+                return False
+        
+        # Full validation for runtime
         # Get IP information
         ip_info = get_ip_info()
         logger.info(f"IP Information: {json.dumps(ip_info, indent=2)}")
@@ -145,38 +166,6 @@ def validate_youtube_cookies():
                 logger.error("Consider using a proxy or VPN for the Render deployment")
             return False
         
-        # Log current working directory and cookie file location
-        cwd = os.getcwd()
-        cookie_path = os.path.abspath('cookies.txt')
-        logger.info(f"Current working directory: {cwd}")
-        logger.info(f"Looking for cookies at: {cookie_path}")
-        
-        if not os.path.exists('cookies.txt'):
-            logger.error("cookies.txt file not found!")
-            return False
-            
-        # Check file permissions
-        cookie_stats = os.stat('cookies.txt')
-        logger.info(f"Cookie file size: {cookie_stats.st_size} bytes")
-        logger.info(f"Cookie file permissions: {oct(cookie_stats.st_mode)[-3:]}")
-        logger.info(f"Cookie file owner: {cookie_stats.st_uid}:{cookie_stats.st_gid}")
-        
-        # Cookie file validation already done above
-        
-        # Validate cookie file format
-        with open('cookies.txt', 'r') as f:
-            lines = f.readlines()
-            if not lines:
-                logger.error("Cookie file is empty")
-                return False
-                
-            # Check header
-            if not any(line.startswith('# Netscape HTTP Cookie File') for line in lines[:3]):
-                logger.warning("Cookie file may not be in Netscape format")
-            
-        # Test video - Sabrina Carpenter - Espresso
-        test_url = "https://www.youtube.com/watch?v=eVli-tstM5E"
-        
         # Configure yt-dlp options
         ydl_opts = {
             'quiet': True,
@@ -188,6 +177,9 @@ def validate_youtube_cookies():
         # Add custom headers in Docker
         if is_running_in_docker():
             ydl_opts['http_headers'] = get_custom_headers()
+        
+        # Test video - Sabrina Carpenter - Espresso
+        test_url = "https://www.youtube.com/watch?v=eVli-tstM5E"
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
