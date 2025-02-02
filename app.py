@@ -22,11 +22,14 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
+            "https://moodify-vercel.vercel.app",
+            "https://moodify-vercel.onrender.com",
             "https://moodi-fy.vercel.app",
             "http://localhost:3000",
             "http://localhost:5000",
             "http://127.0.0.1:5000",
             "https://*.vercel.app",
+            "https://*.onrender.com",
             "capacitor://*",  # For mobile apps
             "ionic://*"       # For mobile apps
         ],
