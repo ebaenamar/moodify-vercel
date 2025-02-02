@@ -201,12 +201,31 @@ def validate_youtube_cookies():
                 return False
                 
             # Check for common YouTube cookies
-            required_cookies = ['youtube.com', 'CONSENT', 'VISITOR_INFO1_LIVE', 'LOGIN_INFO']
-            missing_cookies = [cookie for cookie in required_cookies 
-                             if cookie not in cookie_content]
+            domain_required = ['youtube.com']
+            auth_required = ['VISITOR_INFO1_LIVE']
+            auth_alternatives = [
+                ['CONSENT'],  # First alternative set
+                ['SID', 'SSID'],  # Second alternative set
+                ['LOGIN_INFO']  # Third alternative set
+            ]
             
-            if missing_cookies:
-                logger.error(f"Missing required cookies: {missing_cookies}")
+            # Check domain and basic required cookies
+            missing_basic = [cookie for cookie in domain_required + auth_required 
+                           if cookie not in cookie_content]
+            if missing_basic:
+                logger.error(f"Missing required cookies: {missing_basic}")
+                return False
+                
+            # Check if we have at least one set of auth alternatives
+            has_auth = False
+            for alt_set in auth_alternatives:
+                if all(cookie in cookie_content for cookie in alt_set):
+                    has_auth = True
+                    logger.info(f"Found auth cookies: {alt_set}")
+                    break
+                    
+            if not has_auth:
+                logger.error("Missing authentication cookies. Need one of: CONSENT, SID+SSID, or LOGIN_INFO")
                 return False
             
             logger.info("All required YouTube cookies found")
